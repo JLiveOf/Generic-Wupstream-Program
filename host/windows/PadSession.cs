@@ -76,7 +76,7 @@ namespace WupPad
         internal Rectangle Monitor;
         internal bool Video, Audio, Microphone, Cable;
         internal string Recording;
-        internal volatile bool Touch;
+        internal volatile bool Touch, XboxLayout;
         internal volatile int Brightness = -1;
         internal long VibrationUntil;
     }
@@ -152,6 +152,7 @@ namespace WupPad
                     desktop.ReleaseTouch();
                     Native.host_rumble(pad, 0);
                     videoStop.Cancel();
+                    Native.host_interrupt(pad);
                     if (video != null) video.GetAwaiter().GetResult();
                 }
             }
@@ -161,18 +162,48 @@ namespace WupPad
             PadAudio audio, Task video)
         {
             var report = new byte[128];
-            var aux = new int[11];
+            var aux = new int[14];
             int[] centers = null;
             int lastSequence = -1, lastBrightness = -1;
-            bool motor = false;
+            bool motor = false, recovering = false, lastXboxLayout = false;
             var clock = Stopwatch.StartNew();
             long repaintAt = 0;
             string connected = Language.Get("Conectado · ") + address;
             while (!stop.IsCancellationRequested)
             {
                 if (video != null && video.IsFaulted) video.GetAwaiter().GetResult();
-                if (Native.host_input(pad, report, aux) != 0)
+                int link = Native.host_input(pad, report, aux);
+                long now = clock.ElapsedMilliseconds;
+                if (link < 0)
                     throw new InvalidOperationException(Language.Get("Se perdió la conexión con el GamePad."));
+                if (link > 0)
+                {
+                    if (!recovering)
+                    {
+                        desktop.ReleaseTouch();
+                        controller.ResetReport();
+                        controller.SubmitReport();
+                        Native.host_rumble(pad, 0);
+                        motor = false;
+                        lastSequence = -1;
+                        repaintAt = 0;
+                        recovering = true;
+                    }
+                    audio.Pump(pad, now);
+                    if (now >= repaintAt)
+                    {
+                        int seconds = (aux[11] + 999) / 1000;
+                        publish(string.Format(Language.Get("Reconectando con {0} · {1} s"), address, seconds), null);
+                        repaintAt = now + 250;
+                    }
+                    Thread.Sleep(4);
+                    continue;
+                }
+                if (recovering)
+                {
+                    recovering = false;
+                    repaintAt = 0;
+                }
                 if (centers == null)
                 {
                     centers = new int[4];
@@ -184,10 +215,12 @@ namespace WupPad
                 }
 
                 int sequence = report[0] | (report[1] << 8);
-                if (sequence != lastSequence)
+                bool xboxLayout = options.XboxLayout;
+                if (sequence != lastSequence || xboxLayout != lastXboxLayout)
                 {
                     lastSequence = sequence;
-                    Submit(controller, new PadState(report, centers));
+                    lastXboxLayout = xboxLayout;
+                    Submit(controller, new PadState(report, centers), xboxLayout);
                 }
                 desktop.Touch(options.Video && options.Touch && aux[0] != 0, aux[1], aux[2]);
 
@@ -203,16 +236,19 @@ namespace WupPad
                     Native.host_rumble(pad, vibrate ? 1 : 0);
                     motor = vibrate;
                 }
-                audio.Pump(pad, clock.ElapsedMilliseconds);
-                if (clock.ElapsedMilliseconds >= repaintAt)
+                audio.Pump(pad, now);
+                if (now >= repaintAt)
                 {
                     var view = new PadState(report, centers)
                     {
                         MicLevel = audio.Level, AudioStatus = audio.Status, Backlight = aux[10], Volume = aux[9],
                         Accel = new[] { aux[3], aux[4], aux[5] }, Gyro = new[] { aux[6], aux[7], aux[8] }
                     };
-                    publish(connected, view);
-                    repaintAt = clock.ElapsedMilliseconds + 45;
+                    string status = options.Video ? connected + string.Format(
+                        Language.Get("  ·  Límite {0:0.0} Mb/s  ·  Solicitudes de reenvío {1:0.0} %"),
+                        aux[12] / 1000.0, aux[13] / 10.0) : connected;
+                    publish(status, view);
+                    repaintAt = now + 45;
                 }
                 Thread.Sleep(4);
             }
@@ -248,9 +284,15 @@ namespace WupPad
             rumble = e.LargeMotor != 0 || e.SmallMotor != 0;
         }
 
-        private static void Submit(IXbox360Controller controller, PadState state)
+        private static void Submit(IXbox360Controller controller, PadState state, bool xboxLayout)
         {
-            controller.SetButtonsFull(state.Buttons);
+            ushort buttons = state.Buttons;
+            if (xboxLayout)
+            {
+                // Swap A/B and X/Y so the lower button is Xbox A and the left button is Xbox X.
+                buttons = (ushort)((buttons & 0x0fff) | ((buttons & 0x5000) << 1) | ((buttons & 0xa000) >> 1));
+            }
+            controller.SetButtonsFull(buttons);
             controller.SetSliderValue(Xbox360Slider.LeftTrigger, state.Held[6] ? (byte)255 : (byte)0);
             controller.SetSliderValue(Xbox360Slider.RightTrigger, state.Held[7] ? (byte)255 : (byte)0);
             controller.SetAxisValue(Xbox360Axis.LeftThumbX, state.Axes[0]);

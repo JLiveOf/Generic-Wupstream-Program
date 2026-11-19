@@ -15,6 +15,8 @@ namespace WupPad
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void host_close(IntPtr pad);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void host_interrupt(IntPtr pad);
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int host_input(IntPtr pad, [Out] byte[] report, [Out] int[] extra);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int host_frame(IntPtr pad, IntPtr pixels, int stride);

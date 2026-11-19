@@ -38,7 +38,7 @@ struct wupstream {
     x264_t *enc;
     x264_picture_t pic;
     uint32_t frame, aseq;
-    int keyframe, gone, have;
+    int keyframe, gone, have, recovering;
     double last_in, last_hello, last_key, next, last_rumble;
     uint8_t report[128], *slices, apart[16];
     int napart, center[4];                                /* (the sticks at rest) */
@@ -47,7 +47,10 @@ struct wupstream {
     int win_n, locked, wait_cur, wait_prev, skips, extra;
     pthread_t thread; pthread_mutex_t mu; pthread_cond_t cv;  /* the sender; mu guards everything here */
     int fresh, took, have_pic, quit, started, sync_ready, sent, repeats;
-    struct { uint32_t frame; int len, idr; uint8_t *data; } kept[8];   /* the last frames, to send lost packets again */
+    struct { uint32_t frame; int len, idr; uint8_t *data, retries[128]; } kept[8];
+    int bitrate, applied_bitrate, adaptive, sent_packets, missing_packets, loss_permille, clean_windows;
+    double rate_window, retry_window;
+    int retries_in_window;
     int resent, drop, rumble, rumble_sent, mic, light, light_pad;   /* light: the backlight, 1..6 | keep << 7 (in every hello) */
     int16_t micbuf[48000]; int mic_w, mic_n;                 /* the last second of the microphone */            /* frames waiting on the pad: this refresh, the last */
 };
@@ -60,6 +63,36 @@ static void put(wupstream *w, const void *d, int n) { sendto(w->sock, (const cha
    in step with that. The network's delay only ever makes a measurement late: the earliest of each 64 counts. */
 #define PERIOD 0.0166833
 #define CUSHION 2                                             /* frames kept waiting on the pad (each: 16.7 ms later on screen) */
+#define LINK_PAUSE 0.30
+#define LINK_TIMEOUT 20.0
+#define RATE_MIN 1600
+#define RATE_START 3200
+#define RATE_MAX 5500
+
+static void rate_down(wupstream *w) {
+    w->clean_windows = 0;
+    if (w->adaptive && w->bitrate > RATE_MIN) {
+        w->bitrate = w->bitrate * 4 / 5;
+        if (w->bitrate < RATE_MIN) w->bitrate = RATE_MIN;
+    }
+}
+
+static void sample_rate(wupstream *w, double t) {
+    if (!w->rate_window) w->rate_window = t;
+    if (t - w->rate_window < 1.0) return;
+    if (w->sent_packets >= 30) {
+        w->loss_permille = w->missing_packets * 1000 / w->sent_packets;
+        if (w->loss_permille > 1000) w->loss_permille = 1000;
+        if (w->loss_permille > 35) rate_down(w);
+        else if (!w->recovering && w->loss_permille < 12 && ++w->clean_windows >= 5) {
+            w->clean_windows = 0;
+            if (w->adaptive && w->bitrate < RATE_MAX)
+                w->bitrate = w->bitrate + 300 > RATE_MAX ? RATE_MAX : w->bitrate + 300;
+        } else if (w->loss_permille >= 12) w->clean_windows = 0;
+    }
+    w->sent_packets = w->missing_packets = 0;
+    w->rate_window = t;
+}
 static void refresh_seen(wupstream *w, double t) {
     if (!w->vper) { w->vper = PERIOD; w->vbase = t; w->win_n = 0; }
     double e = fmod(t - w->vbase, w->vper);
@@ -84,23 +117,38 @@ static void send_packet(wupstream *w, int j, int q) {            /* packet q of 
 static void pump(wupstream *w) {                               /* what the pad sent; a hello now and then */
     uint8_t b[1100];
     struct sockaddr_in from; wup_socklen fl = sizeof from;
-    int n;
-    while ((n = recvfrom(w->sock, (char *)b, sizeof b, 0, (struct sockaddr *)&from, &fl)) > 0) {
+    double received_at = now();
+    if (received_at - w->retry_window >= 0.016) { w->retry_window = received_at; w->retries_in_window = 0; }
+    for (int read = 0; read < 96; read++) {
+        int n = recvfrom(w->sock, (char *)b, sizeof b, 0, (struct sockaddr *)&from, &fl);
+        if (n <= 0) break;
         if (from.sin_addr.s_addr != w->pad.sin_addr.s_addr || from.sin_port != w->pad.sin_port) continue;
-        if (b[0] == 'N' && n >= 4 + 8 * b[1]) {                      /* the pad lacks these packets: again, at once */
+        if (!w->recovering && b[0] == 'N' && n >= 4 && n >= 4 + 8 * b[1]) {
             for (int i = 0; i < b[1]; i++) {
                 uint32_t f; memcpy(&f, b + 4 + 8 * i, 4);
                 int k = b[8 + 8 * i] | b[9 + 8 * i] << 8, j = f % 8;
-                if (w->kept[j].frame != f || !w->kept[j].data) continue;
+                if (w->kept[j].frame != f || !w->kept[j].data || w->frame - f > 4) continue;
                 int npk = (w->kept[j].len + 1399) / 1400;
-                for (int q = k == 0xffff ? 0 : k; q < (k == 0xffff ? npk : k + 1) && q < npk; q++) send_packet(w, j, q), w->resent++;
+                for (int q = k == 0xffff ? 0 : k; q < (k == 0xffff ? npk : k + 1) && q < npk; q++) {
+                    if (w->kept[j].retries[q] >= 2 || w->retries_in_window >= 24) continue;
+                    if (!w->kept[j].retries[q]) w->missing_packets++;
+                    w->kept[j].retries[q]++;
+                    w->retries_in_window++;
+                    send_packet(w, j, q);
+                    w->resent++;
+                }
             }
         }
-        if (w->mic && b[0] == 'M' && n > 8) for (int i = 8; i + 1 < n; i += 2) {   /* the microphone: 16-bit mono, 48 kHz */
+        if (w->mic && !w->recovering && b[0] == 'M' && n > 8) for (int i = 8; i + 1 < n; i += 2) {
             w->micbuf[w->mic_w] = (int16_t)(b[i] | b[i + 1] << 8); w->mic_w = (w->mic_w + 1) % 48000;
             if (w->mic_n < 48000) w->mic_n++;
         }
         if (b[0] == 'I' && n == 136) {
+            if (w->recovering) {
+                w->recovering = 0;
+                w->vper = 0; w->locked = 0; w->wait_t = 0; w->wait_cur = 7; w->wait_prev = -1;
+                w->keyframe = 1;
+            }
             memcpy(w->report, b + 8, 128); w->have = 1; w->last_in = now(); w->light_pad = b[4];
             refresh_seen(w, w->last_in - (b[2] | b[3] << 8) / 997300.0);   /* (ticks since its refresh: ~997.3 kHz) */
             if (b[1] & 1 && now() - w->last_key > 0.1) w->keyframe = 1;   /* (not the requests already on their way) */
@@ -115,7 +163,14 @@ static void pump(wupstream *w) {                               /* what the pad s
         char r[4] = { 'R', (char)w->rumble, 0, 0 };
         put(w, r, 4); w->rumble_sent = w->rumble; w->last_rumble = t;
     }
-    if (w->have && w->started && t - w->last_in > 0.75 && !w->gone) { w->gone = 1; pthread_cond_broadcast(&w->cv); }
+    if (w->have && w->started && !w->gone) {
+        if (!w->recovering && t - w->last_in >= LINK_PAUSE) {
+            w->recovering = 1; w->extra = 0; w->mic_n = 0;
+            rate_down(w);
+        }
+        if (t - w->last_in >= LINK_TIMEOUT) { w->gone = 1; pthread_cond_broadcast(&w->cv); }
+        sample_rate(w, t);
+    }
 }
 
 static void *sender(void *arg);
@@ -138,7 +193,13 @@ wupstream *wupstream_open_cancel(const char *ip, int timeout_ms, int (*cancel)(v
     struct sockaddr_in me = { 0 };
     me.sin_family = AF_INET;
     if (w->sock == WUP_INVALID_SOCKET || bind(w->sock, (struct sockaddr *)&me, sizeof me)) { wupstream_close(w); return NULL; }
+    int receive_buffer = 256 * 1024, send_buffer = 64 * 1024;
+    setsockopt(w->sock, SOL_SOCKET, SO_RCVBUF, (const char *)&receive_buffer, sizeof receive_buffer);
+    setsockopt(w->sock, SOL_SOCKET, SO_SNDBUF, (const char *)&send_buffer, sizeof send_buffer);
 #ifdef _WIN32
+    BOOL udp_reset = FALSE;
+    DWORD returned;
+    WSAIoctl(w->sock, _WSAIOW(IOC_VENDOR, 12), &udp_reset, sizeof udp_reset, NULL, 0, &returned, NULL, NULL);
     u_long nb = 1; ioctlsocket(w->sock, FIONBIO, &nb);
 #else
     fcntl(w->sock, F_SETFL, fcntl(w->sock, F_GETFL) | O_NONBLOCK);
@@ -169,7 +230,7 @@ wupstream *wupstream_open_cancel(const char *ip, int timeout_ms, int (*cancel)(v
         closesocket(find);
         if (!ok) { wupstream_close(w); return 0; }
     }
-    while (!w->have || !w->locked) {                                 /* hello until it answers, and we know where its screen's refresh is */
+    while (!w->have || !w->locked || now() - w->last_in >= LINK_PAUSE) {
         pump(w);
         if (now() > end || (cancel && cancel(context))) { wupstream_close(w); return 0; }
         nap();
@@ -182,9 +243,10 @@ wupstream *wupstream_open_cancel(const char *ip, int timeout_ms, int (*cancel)(v
         { "keyint", "infinite" }, { "slices", "1" }, { "sliced-threads", "0" }, { "threads", "1" }, { "aud", "0" },
         { "ipratio", "1.0" } };
     for (unsigned i = 0; i < sizeof drc / sizeof *drc; i++) x264_param_parse(&p, drc[i][0], drc[i][1]);
-    /* constant quality (CRF), capped at 10 Mbps: above that frames get lost over the pad's Wi-Fi and its decoder falls
-       behind (measured); a busy frame may borrow 3 frames' worth */
-    int kbps = getenv("WUPSTREAM_KBPS") ? atoi(getenv("WUPSTREAM_KBPS")) : 10000;
+    /* An explicit bitrate keeps the fixed-rate behavior used by test tools. */
+    int fixed = getenv("WUPSTREAM_KBPS") ? atoi(getenv("WUPSTREAM_KBPS")) : 0;
+    w->adaptive = fixed <= 0;
+    int kbps = w->adaptive ? RATE_START : fixed;
     p.i_width = WUPSTREAM_W; p.i_height = WUPSTREAM_H; p.i_csp = X264_CSP_I420; p.i_fps_num = 60; p.i_fps_den = 1;
     p.rc.i_rc_method = X264_RC_CRF; p.rc.f_rf_constant = getenv("WUPSTREAM_CRF") ? (float)atof(getenv("WUPSTREAM_CRF")) : 18;
     p.rc.i_vbv_max_bitrate = kbps; p.rc.i_vbv_buffer_size = kbps / 60;
@@ -195,6 +257,8 @@ wupstream *wupstream_open_cancel(const char *ip, int timeout_ms, int (*cancel)(v
     }
     x264_param_apply_profile(&p, "high");
     if (!(w->enc = x264_encoder_open(&p)) || x264_picture_alloc(&w->pic, X264_CSP_I420, WUPSTREAM_W, WUPSTREAM_H)) { wupstream_close(w); return 0; }
+    x264_encoder_parameters(w->enc, &p);
+    w->bitrate = w->applied_bitrate = p.rc.i_vbv_max_bitrate;
     w->slices = malloc(WUPSTREAM_W * WUPSTREAM_H * 2);
     if (!w->slices) { wupstream_close(w); return NULL; }
     w->keyframe = 1;
@@ -250,6 +314,27 @@ int wupstream_input(wupstream *w, wupstream_input_t *in) {
     return gone ? -1 : 0;
 }
 
+int wupstream_link(wupstream *w, int *age_ms, int *kbps, int *resend_permille) {
+    pthread_mutex_lock(&w->mu);
+    *age_ms = (int)((now() - w->last_in) * 1000);
+    *kbps = w->bitrate;
+    *resend_permille = w->loss_permille;
+    int result = w->gone || w->quit ? -1 : w->recovering;
+    pthread_mutex_unlock(&w->mu);
+    return result;
+}
+
+static void apply_bitrate(wupstream *w) {
+    if (w->bitrate == w->applied_bitrate) return;
+    x264_param_t params;
+    x264_encoder_parameters(w->enc, &params);
+    params.rc.i_vbv_max_bitrate = w->bitrate;
+    params.rc.i_vbv_buffer_size = w->bitrate / 60;
+    if (!x264_encoder_reconfig(w->enc, &params))
+        w->applied_bitrate = w->bitrate;
+    else w->bitrate = w->applied_bitrate;
+}
+
 /* encode the picture in w->pic and send it: at the next refresh slot, or at once (the cushion's repeats) */
 static void send_picture(wupstream *w, int at_once) {
     /* one frame per refresh of the pad's screen, sent from a fixed point of it */
@@ -264,13 +349,15 @@ static void send_picture(wupstream *w, int at_once) {
         if (w->wait_prev > CUSHION) { slot += w->vper; w->skips++; w->wait_prev = -1; w->wait_cur = 7; w->wait_t = slot; }
         w->next = slot;
         /* the program has until 5 ms before then to hand over its next picture (the encoder's time); else the last one again */
-        while ((t2 = now()) < w->next - 0.005 && !w->quit) {
+        while ((t2 = now()) < w->next - 0.005 && !w->quit && !w->recovering) {
             pump(w);                                                     /* (what the pad says, as it comes: the timing is in it) */
             pthread_mutex_unlock(&w->mu);
             if (w->next - 0.005 - t2 > 0.002) nap();
             pthread_mutex_lock(&w->mu);
         }
     }
+    if (w->quit || w->recovering || w->gone) return;
+    apply_bitrate(w);
     w->took = w->fresh;
     double t = now();
     int key = w->keyframe && t - w->last_key > 0.25;                /* (asked for at 200 Hz while one is on its way) */
@@ -294,23 +381,26 @@ static void send_picture(wupstream *w, int at_once) {
             w->slices[len++] = d[k];
         }
     }
-    { int j = w->frame % 8;                                           /* kept, for packets the pad asks for again */
-      uint8_t *d = realloc(w->kept[j].data, len ? len : 1);
-      if (d) { memcpy(d, w->slices, len); w->kept[j].data = d; w->kept[j].frame = w->frame; w->kept[j].len = len; w->kept[j].idr = idr; } }
+    int j = w->frame % 8, npk = (len + 1399) / 1400;
+    uint8_t *data = npk > 0 && npk <= 128 ? realloc(w->kept[j].data, len) : NULL;
     if (w->took) { w->fresh = 0; w->sent++; pthread_cond_broadcast(&w->cv); } else if (!at_once) w->repeats++;   /* (the program goes on) */
+    if (!data) { w->keyframe = 1; w->last_key = 0; return; }
+    memcpy(data, w->slices, len);
+    w->kept[j].data = data; w->kept[j].frame = w->frame; w->kept[j].len = len; w->kept[j].idr = idr;
+    memset(w->kept[j].retries, 0, sizeof w->kept[j].retries);
     pthread_mutex_unlock(&w->mu);
     while ((t2 = now()) < w->next) if (w->next - t2 > 0.002) nap();
     /* spread over up to 4 ms: the pad's radio talks at 54 Mbit/s */
-    double t0 = now(), span = 0.004 * (len + 1399) / 1400 / ((len + 1399) / 1400 + 1);
-    int npk = (len + 1399) / 1400, j = w->frame % 8;
+    double t0 = now(), span = 0.004 * npk / (npk + 1);
     for (int k = 0; k < npk; k++) {
         while (now() < t0 + span * k / npk) ;                       /* (sub-millisecond waits: sleeping is too coarse) */
         if (w->drop && rand() % w->drop == 0) continue;              /* (WUPSTREAM_DROP: a test of the pad asking again) */
         send_packet(w, j, k);
     }
     pthread_mutex_lock(&w->mu);
+    w->sent_packets += npk;
     w->frame++;
-    if (idr) w->extra = CUSHION;
+    if (idr && !w->recovering) w->extra = CUSHION;
 }
 /* The sender. The pad's decoder stops for good when a refresh comes and it has no frame queued (measured: every second
    or third time). So (1) a cushion of frames is kept waiting on the pad: after every keyframe the same picture goes
@@ -321,9 +411,9 @@ static void *sender(void *arg) {
     pthread_mutex_lock(&w->mu);
     while (!w->quit) {
         pump(w);
-        if (!w->have_pic || w->gone) { pthread_mutex_unlock(&w->mu); nap(); pthread_mutex_lock(&w->mu); continue; }
+        if (!w->have_pic || w->gone || w->recovering) { pthread_mutex_unlock(&w->mu); nap(); pthread_mutex_lock(&w->mu); continue; }
         send_picture(w, 0);
-        while (w->extra > 0 && !w->quit) { w->extra--; send_picture(w, 1); }
+        while (w->extra > 0 && !w->quit && !w->recovering && !w->gone) { w->extra--; send_picture(w, 1); }
     }
     pthread_mutex_unlock(&w->mu);
     return NULL;
@@ -331,8 +421,8 @@ static void *sender(void *arg) {
 
 int wupstream_frame(wupstream *w, const void *pixels, int stride, int format) {
     pthread_mutex_lock(&w->mu);
-    while (w->fresh && !w->gone) pthread_cond_wait(&w->cv, &w->mu);  /* (the one before is on its way: one per refresh) */
-    if (w->gone) { pthread_mutex_unlock(&w->mu); return -1; }
+    while (w->fresh && !w->gone && !w->quit) pthread_cond_wait(&w->cv, &w->mu);
+    if (w->gone || w->quit) { pthread_mutex_unlock(&w->mu); return -1; }
     const uint8_t *px = pixels;
     int ri = format == WUPSTREAM_BGRA ? 2 : 0, bi = 2 - ri;
     uint8_t *Y = w->pic.img.plane[0], *U = w->pic.img.plane[1], *V = w->pic.img.plane[2];
@@ -347,15 +437,18 @@ int wupstream_frame(wupstream *w, const void *pixels, int stride, int format) {
             }
         }
     w->fresh = w->have_pic = 1;
-    while (w->fresh && !w->gone) pthread_cond_wait(&w->cv, &w->mu);  /* until it has gone out: this paces the program */
-    int r = w->gone ? -1 : 0;
+    while (w->fresh && !w->gone && !w->quit) pthread_cond_wait(&w->cv, &w->mu);
+    int r = w->gone || w->quit ? -1 : 0;
     pthread_mutex_unlock(&w->mu);
     return r;
 }
 
 int wupstream_audio(wupstream *w, const int16_t *lr, int frames) {
-    pthread_mutex_lock(&w->mu); pump(w); int gone = w->gone; pthread_mutex_unlock(&w->mu);
+    pthread_mutex_lock(&w->mu); pump(w);
+    int gone = w->gone, recovering = w->recovering;
+    pthread_mutex_unlock(&w->mu);
     if (gone) return -1;
+    if (recovering) { w->napart = 0; return 0; }
     const uint8_t *src = (const uint8_t *)lr;
     int n = frames * 4;
     uint8_t pkt[8 + 1408] = { 'A' };
@@ -396,10 +489,17 @@ void wupstream_rumble(wupstream *w, int on) {
     pthread_mutex_unlock(&w->mu);
 }
 
+void wupstream_interrupt(wupstream *w) {
+    pthread_mutex_lock(&w->mu);
+    w->quit = 1;
+    pthread_cond_broadcast(&w->cv);
+    pthread_mutex_unlock(&w->mu);
+}
+
 void wupstream_close(wupstream *w) {
     if (!w) return;
     if (w->started) {
-        pthread_mutex_lock(&w->mu); w->quit = 1; pthread_cond_broadcast(&w->cv); pthread_mutex_unlock(&w->mu);
+        wupstream_interrupt(w);
         pthread_join(w->thread, NULL);
     }
     if (w->sock != WUP_INVALID_SOCKET && w->pad.sin_addr.s_addr) {

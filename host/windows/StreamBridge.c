@@ -9,6 +9,7 @@ EXPORT wupstream *host_open(const char *ip, int timeout, int (*cancel)(void *)) 
 }
 
 EXPORT void host_close(wupstream *w) { wupstream_close(w); }
+EXPORT void host_interrupt(wupstream *w) { wupstream_interrupt(w); }
 EXPORT int host_frame(wupstream *w, const void *pixels, int stride) {
     return wupstream_frame(w, pixels, stride, WUPSTREAM_BGRA);
 }
@@ -20,6 +21,8 @@ EXPORT void host_light(wupstream *w, int level) { wupstream_backlight(w, level, 
 EXPORT int host_input(wupstream *w, uint8_t *report, int *aux) {
     wupstream_input_t in;
     int result = wupstream_input(w, &in);
+    if (result) return result;
+    result = wupstream_link(w, aux + 11, aux + 12, aux + 13);
     if (result) return result;
     memcpy(report, in.report, sizeof in.report);
     aux[0] = in.touched;

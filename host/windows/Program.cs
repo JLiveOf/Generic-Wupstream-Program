@@ -23,7 +23,17 @@ namespace WupPad
             catch (EntryPointNotFoundException) { SetProcessDPIAware(); }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainWindow());
+            bool first;
+            using (var instance = new Mutex(true, @"Local\GenericWupstreamProgram", out first))
+            {
+                if (first) Application.Run(new MainWindow());
+                else
+                {
+                    Language.English = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName != "es";
+                    MessageBox.Show(Language.Get("Generic Wupstream Program ya está abierto."),
+                        "Generic Wupstream Program", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
         }
 
         [DllImport("user32.dll")]
@@ -58,6 +68,8 @@ namespace WupPad
         private readonly CheckBox touch;
         private readonly CheckBox microphone;
         private readonly CheckBox cable;
+        private readonly CheckBox xboxLayout;
+        private readonly ToolTip tips = new ToolTip();
         private readonly Screen[] screens;
         private readonly ProgressBar micMeter = new ProgressBar();
         private readonly PadView preview = new PadView();
@@ -173,6 +185,11 @@ namespace WupPad
             {
                 Open("joy.cpl");
             };
+            xboxLayout = AddCheck("ABXY por posición Xbox", 229, 678, 225, false);
+            xboxLayout.CheckedChanged += delegate
+            {
+                if (activeOptions != null) activeOptions.XboxLayout = xboxLayout.Checked;
+            };
             AddButton("Instalar Homebrew Menu", 460, 675, 218, 34, false).Click += delegate
             {
                 Open("https://github.com/ravensclawx/wup-homebrew#get-it");
@@ -276,6 +293,7 @@ namespace WupPad
             brightness.AccessibleName = Language.Get("Brillo del GamePad");
             micMeter.AccessibleName = Language.Get("Nivel del micrófono");
             preview.AccessibleName = Language.Get("Estado de botones y sticks");
+            tips.SetToolTip(xboxLayout, Language.Get("Usa las posiciones de Xbox: B→A, A→B, Y→X, X→Y."));
             brightness.Items[0] = Language.Get("Del GamePad");
             int selected = monitor.SelectedIndex;
             monitor.Items.Clear();
@@ -336,7 +354,7 @@ namespace WupPad
             var launch = new StreamOptions
             {
                 Monitor = screens[monitor.SelectedIndex].Bounds,
-                Video = video.Checked, Audio = audio.Checked, Touch = touch.Checked,
+                Video = video.Checked, Audio = audio.Checked, Touch = touch.Checked, XboxLayout = xboxLayout.Checked,
                 Microphone = microphone.Checked, Cable = microphone.Checked && cable.Checked,
                 Recording = microphone.Checked ? recording : null,
                 Brightness = brightness.SelectedIndex == 0 ? -1 : brightness.SelectedIndex
@@ -432,7 +450,7 @@ namespace WupPad
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) refresh.Dispose();
+            if (disposing) { refresh.Dispose(); tips.Dispose(); }
             base.Dispose(disposing);
         }
     }
