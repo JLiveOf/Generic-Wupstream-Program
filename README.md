@@ -30,11 +30,11 @@ La cámara, el NFC/Amiibo y el infrarrojo requieren soporte adicional en el soft
 
 ## Compilar y licencias
 
-En Windows x64, instala .NET Framework 4.8, Git para Windows y un compilador MinGW-w64 x64 con Make, como [w64devkit](https://github.com/skeeto/w64devkit). Desde la raíz del código, ejecuta en PowerShell:
+En Windows x64, instala .NET Framework 4.8, Git para Windows y un compilador MinGW-w64 x64 con Make, como [w64devkit](https://github.com/skeeto/w64devkit). Añade [NASM](https://www.nasm.us/) al PATH para compilar x264 con SIMD. Desde la raíz del código, ejecuta en PowerShell:
 
     .\host\windows\Build.ps1 -ToolchainBin 'C:\ruta\a\w64devkit\bin'
 
-Los binarios aparecen en `build/windows`. Con NASM en el PATH se activa el ensamblador optimizado de x264. El script obtiene la revisión fijada de x264, le aplica el parche DRH de wup-stream y verifica el hash del paquete Nefarius.ViGEm.Client. Si tu copia de Git Bash está en otra ubicación, indícala con `-GitBash`.
+Los binarios aparecen en `build/windows`. La compilación de Windows exige x264 con SIMD porque, sin esa optimización, el codificador puede perder plazos y bloquear el decodificador del GamePad. El script obtiene la revisión fijada de x264, le aplica el parche DRH de wup-stream y verifica el hash del paquete Nefarius.ViGEm.Client. Si tu copia de Git Bash está en otra ubicación, indícala con `-GitBash`.
 
 Para generar el instalador después de compilar la app, ejecuta `host/windows/BuildSetup.ps1` con [NSIS 3](https://nsis.sourceforge.io/Download) en el PATH o indica su compilador mediante `-MakeNsis`.
 

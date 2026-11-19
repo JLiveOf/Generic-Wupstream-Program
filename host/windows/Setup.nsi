@@ -6,7 +6,7 @@ Unicode true
 !include "WinVer.nsh"
 
 !define Product "Generic Wupstream Program"
-!define Version "2.1.0"
+!define Version "2.1.1"
 !define Exe "${Product}.exe"
 !define UninstallKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\GenericWupstreamProgram"
 

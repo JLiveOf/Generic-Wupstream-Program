@@ -30,11 +30,11 @@ The camera, NFC/Amiibo, and infrared need additional support in the GamePad soft
 
 ## Build
 
-Install Git for Windows, .NET Framework 4.8, and a Windows x64 MinGW-w64 toolchain with Make, such as [w64devkit](https://github.com/skeeto/w64devkit). From the source directory, run in PowerShell:
+Install Git for Windows, .NET Framework 4.8, and a Windows x64 MinGW-w64 toolchain with Make, such as [w64devkit](https://github.com/skeeto/w64devkit). Add [NASM](https://www.nasm.us/) to the PATH for x264 SIMD support. From the source directory, run in PowerShell:
 
     .\host\windows\Build.ps1 -ToolchainBin 'C:\path\to\w64devkit\bin'
 
-The build outputs appear in `build/windows`. Add NASM to the PATH for optimized x264 assembly. The build fetches a pinned x264 revision, applies the DRH patch, and verifies the Nefarius.ViGEm.Client package hash. Pass `-GitBash` if Git Bash is installed in a custom location.
+The build outputs appear in `build/windows`. Windows builds require x264 SIMD support because missed encoding deadlines can stall the GamePad decoder. The build fetches a pinned x264 revision, applies the DRH patch, and verifies the Nefarius.ViGEm.Client package hash. Pass `-GitBash` if Git Bash is installed in a custom location.
 
 After building the app, run `host/windows/BuildSetup.ps1` with [NSIS 3](https://nsis.sourceforge.io/Download) on the PATH or pass the compiler path as `-MakeNsis`.
 
