@@ -1,0 +1,32 @@
+name: Publish v2.1.1
+on:
+  push:
+    branches: [downloads-v2.1.1]
+    paths: ['Generic-Wupstream-Program-v2.1.1-Setup-win-x64.exe']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify and publish the Windows installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          file='Generic-Wupstream-Program-v2.1.1-Setup-win-x64.exe'
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/$GITHUB_SHA/$file" -o "$file"
+          printf '%s  %s\n' 'e83bff762fe255430fedcd0267fbe7e7c9c029a9791f8f39ade35e24497eef92' "$file" | sha256sum --check
+          cat > release-notes.md <<'NOTES'
+          ## Español
+          
+          El instalador incluye x264 con SIMD para evitar retrasos del codificador y bloqueos de vídeo. Probado con un Wii U GamePad real a unos 60 fps.
+          
+          Cierra la aplicación antes de instalar la actualización. El instalador requiere Windows x64.
+          
+          ## English
+          
+          The installer includes SIMD-enabled x264 to prevent missed encoding deadlines and video stalls. Tested with a real Wii U GamePad at around 60 fps. Close the app before updating.
+          NOTES
+          gh release create v2.1.1 "$file" --repo "$GH_REPO" --target '7f8baecc4b7fcd714ffb548c8351f74b444ffd1b' --title 'Generic Wupstream Program v2.1.1' --notes-file release-notes.md --latest
