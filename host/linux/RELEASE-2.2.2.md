@@ -1,6 +1,6 @@
 ## Español
 
-Esta revisión corrige el empaquetado que impedía instalar el `.deb` en Linux Mint.
+Esta revisión corrige el arranque desde el menú de aplicaciones de Linux Mint y conserva la corrección de instalación del paquete.
 
 Esta versión experimental de Linux añade **Generic Wupstream Gamepad**, un mando virtual con botones, cruceta, dos sticks y gatillos. Usa el receptor oficial **WUP Stream** del GamePad. Desactiva **Enviar pantalla** para jugar solo con el mando.
 
@@ -10,7 +10,7 @@ Tras instalar el `.deb` amd64, reinicia Linux para activar el acceso local a `/d
 
 ## English
 
-This revision fixes a packaging error that prevented installation on Linux Mint.
+This revision fixes launching the installed app from the Linux Mint application menu and retains the package installation fix.
 
 This experimental Linux version adds **Generic Wupstream Gamepad**, a virtual controller with buttons, a D-pad, two sticks, and triggers. Open the official **WUP Stream** receiver on the GamePad. Clear **Enviar pantalla** to use controller input only.
 

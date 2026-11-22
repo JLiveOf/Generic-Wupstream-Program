@@ -25,15 +25,25 @@ jobs:
           (cd build/linux/x264 && ./configure --host=x86_64-linux-gnu --enable-static --enable-pic --disable-cli --disable-opencl --bit-depth=8 && make -j4 libx264.a)
           "$zig" cc -target x86_64-linux-gnu.2.28 -O2 -Wall -Werror -fPIC -shared -Ibuild/linux/x264 host/wupstream.c build/linux/x264/libx264.a -lm -pthread -o build/linux/libwupstream.so
           python3 -m py_compile host/linux/generic-wupstream host/linux/build-deb.py
-          python3 host/linux/build-deb.py build/linux/generic-wupstream_2.2.2+experimental.2_amd64.deb build/linux/libwupstream.so
-          dpkg-deb --info build/linux/generic-wupstream_2.2.2+experimental.2_amd64.deb
+          python3 host/linux/build-deb.py build/linux/generic-wupstream_2.2.2+experimental.3_amd64.deb build/linux/libwupstream.so
+          dpkg-deb --info build/linux/generic-wupstream_2.2.2+experimental.3_amd64.deb
       - name: Verify dpkg unpack on a clean root
         run: |
           root="$(mktemp -d)"
-          sudo dpkg --root="$root" --unpack build/linux/generic-wupstream_2.2.2+experimental.2_amd64.deb
+          sudo dpkg --root="$root" --unpack build/linux/generic-wupstream_2.2.2+experimental.3_amd64.deb
           test -x "$root/usr/bin/generic-wupstream"
           test -f "$root/usr/lib/generic-wupstream/wup_gamepad.py"
           test -f "$root/usr/lib/generic-wupstream/libwupstream.so"
+      - name: Install the package and verify that the launcher opens a window
+        run: |
+          sudo apt-get install -y xvfb xdotool ./build/linux/generic-wupstream_2.2.2+experimental.3_amd64.deb
+          GDK_BACKEND=x11 xvfb-run -a bash -e -c '
+            /usr/bin/generic-wupstream &
+            pid=$!
+            trap "kill $pid 2>/dev/null || true" EXIT
+            timeout 15 xdotool search --sync --onlyvisible --name "^Generic Wupstream Program$"
+            kill -0 "$pid"
+          '
       - name: Verify virtual gamepad
         run: |
           sudo modprobe uinput || true
@@ -41,7 +51,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux-deb
-          path: build/linux/generic-wupstream_2.2.2+experimental.2_amd64.deb
+          path: build/linux/generic-wupstream_2.2.2+experimental.3_amd64.deb
           if-no-files-found: error
 
   publish:
@@ -58,8 +68,8 @@ jobs:
           name: linux-deb
           path: assets
       - run: |
-          if ! gh release view v2.2.2-linux.2 >/dev/null 2>&1; then
-            gh release create v2.2.2-linux.2 assets/*.deb --target "$GITHUB_SHA" --prerelease --latest=false \
+          if ! gh release view v2.2.2-linux.3 >/dev/null 2>&1; then
+            gh release create v2.2.2-linux.3 assets/*.deb --target "$GITHUB_SHA" --prerelease --latest=false \
               --title "Generic Wupstream Program 2.2.2 | Linux experimental" \
               --notes-file host/linux/RELEASE-2.2.2.md
           fi

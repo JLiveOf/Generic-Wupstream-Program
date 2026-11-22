@@ -2,7 +2,7 @@
 
 [English guide](README.en.md)
 
-Instala el paquete x86-64 con `sudo apt install ./generic-wupstream_2.2.2+experimental.2_amd64.deb`.
+Instala el paquete x86-64 con `sudo apt install ./generic-wupstream_2.2.2+experimental.3_amd64.deb`.
 Reinicia Linux tras la instalación para activar el módulo y la regla de acceso a `/dev/uinput` para la sesión local activa.
 Abre **Generic Wupstream Program** desde el lanzador o ejecuta `generic-wupstream`.
 
