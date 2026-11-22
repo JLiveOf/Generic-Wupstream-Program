@@ -2,7 +2,7 @@
 
 [Guía en español](README.md)
 
-Install the x86-64 package with `sudo apt install ./generic-wupstream_2.2.2+experimental.1_amd64.deb`. Reboot to load the module and apply the `/dev/uinput` access rule for the active local session. Open **Generic Wupstream Program** from the launcher or run `generic-wupstream`.
+Install the x86-64 package with `sudo apt install ./generic-wupstream_2.2.2+experimental.2_amd64.deb`. Reboot to load the module and apply the `/dev/uinput` access rule for the active local session. Open **Generic Wupstream Program** from the launcher or run `generic-wupstream`.
 
 In the GamePad's Homebrew Menu, install and open the official **WUP Stream** from the App Store. Enter the IP shown on the GamePad and choose a frame rate and quality. The app streams H.264 at 854 × 480 with capture rates from 15 to 60 FPS. Audio support is pending on Linux.
 
