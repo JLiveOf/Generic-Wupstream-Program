@@ -1,0 +1,58 @@
+name: Linux experimental 2.2.2
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/linux-2.2.2.yml]
+  workflow_dispatch:
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Linux x64 package
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nasm python3-evdev
+          mkdir -p build/linux
+          curl -fsSL https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz | tar -xJ -C build/linux
+          zig="$PWD/build/linux/zig-x86_64-linux-0.14.1/zig"
+          export CC="$zig cc -target x86_64-linux-gnu.2.28" AR="$zig ar" RANLIB="$zig ranlib"
+          git init -q build/linux/x264
+          git -C build/linux/x264 fetch -q --depth 1 https://github.com/mirror/x264.git b35605ace3ddf7c1a5d67a2eb553f034aef41d55
+          git -C build/linux/x264 checkout -q FETCH_HEAD
+          git -C build/linux/x264 apply "$PWD/host/x264-drh-mode.patch"
+          (cd build/linux/x264 && ./configure --host=x86_64-linux-gnu --enable-static --enable-pic --disable-cli --disable-opencl --bit-depth=8 && make -j4 libx264.a)
+          "$zig" cc -target x86_64-linux-gnu.2.28 -O2 -Wall -Werror -fPIC -shared -Ibuild/linux/x264 host/wupstream.c build/linux/x264/libx264.a -lm -pthread -o build/linux/libwupstream.so
+          python3 -m py_compile host/linux/generic-wupstream host/linux/build-deb.py
+          python3 host/linux/build-deb.py build/linux/generic-wupstream_2.2.2+experimental.1_amd64.deb build/linux/libwupstream.so
+          dpkg-deb --info build/linux/generic-wupstream_2.2.2+experimental.1_amd64.deb
+      - name: Verify virtual gamepad
+        run: |
+          sudo modprobe uinput || true
+          sudo /usr/bin/python3 host/linux/test_gamepad.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: build/linux/generic-wupstream_2.2.2+experimental.1_amd64.deb
+          if-no-files-found: error
+
+  publish:
+    needs: linux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-deb
+          path: assets
+      - run: |
+          if ! gh release view v2.2.2-linux.1 >/dev/null 2>&1; then
+            gh release create v2.2.2-linux.1 assets/*.deb --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Generic Wupstream Program 2.2.2 | Linux experimental" \
+              --notes-file host/linux/RELEASE-2.2.2.md
+          fi

@@ -30,6 +30,10 @@ def build(output, engine):
         raise ValueError("Expected an amd64 Linux ELF library")
     data = [
         ("usr/bin/generic-wupstream", (HERE / "generic-wupstream").read_bytes(), 0o755),
+        ("usr/lib/generic-wupstream/wup_gamepad.py", (HERE / "wup_gamepad.py").read_bytes(), 0o644),
+        ("usr/lib/udev/rules.d/70-generic-wupstream-uinput.rules",
+         (HERE / "70-generic-wupstream-uinput.rules").read_bytes(), 0o644),
+        ("usr/lib/modules-load.d/generic-wupstream.conf", (HERE / "generic-wupstream.conf").read_bytes(), 0o644),
         ("usr/share/applications/generic-wupstream.desktop", (HERE / "generic-wupstream.desktop").read_bytes(), 0o644),
         ("usr/share/icons/hicolor/256x256/apps/generic-wupstream.png", (HERE.parent / "assets/app.png").read_bytes(), 0o644),
         ("usr/share/doc/generic-wupstream/README.md", (HERE / "README.md").read_bytes(), 0o644),
@@ -39,15 +43,15 @@ def build(output, engine):
     ]
     installed = sum(len(content) for _, content, _ in data)
     control = (
-        "Package: generic-wupstream\nVersion: 2.2.1+experimental.1\nArchitecture: amd64\nSection: video\n"
+        "Package: generic-wupstream\nVersion: 2.2.2+experimental.1\nArchitecture: amd64\nSection: video\n"
         "Priority: optional\nMaintainer: Generic Wupstream Program contributors\n"
         f"Installed-Size: {(installed + 1023) // 1024}\n"
-        "Depends: libc6 (>= 2.28), python3, python3-gi, gir1.2-gtk-3.0, gir1.2-gstreamer-1.0, "
+        "Depends: libc6 (>= 2.28), python3, python3-gi, python3-evdev, gir1.2-gtk-3.0, gir1.2-gstreamer-1.0, "
         "gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-x, "
         "gstreamer1.0-pipewire, xdg-desktop-portal\n"
-        "Description: Stream a Linux desktop to a Wii U GamePad\n"
+        "Description: Use a Wii U GamePad as a Linux game controller and display\n"
         " Captures the desktop on X11 or via the ScreenCast portal on Wayland.\n"
-        " Uses the official WUP Stream receiver on the GamePad.\n"
+        " Exposes a virtual controller via uinput and uses the official WUP Stream receiver.\n"
     ).encode()
     output.write_bytes(b"!<arch>\n" + ar_member("debian-binary", b"2.0\n") +
                        ar_member("control.tar.gz", tar_gz([("control", control, 0o644)])) +
