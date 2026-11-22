@@ -14,6 +14,8 @@ Choose **Español / English** in the app before you connect.
 
 The bilingual setup installs the app for the current user, creates a Start menu shortcut, and registers an uninstaller. Get ViGEmBus separately. Close the app before upgrading.
 
+**Connection tip.** If your PC has Wi-Fi, try creating a local network for the GamePad under **Settings → Network & internet → Mobile hotspot**. Select Wi-Fi for sharing and join the hotspot on the GamePad under **Homebrew Menu → Settings → Network → Wi-Fi**. Open WUP Stream and use the new IP address shown on the GamePad. A direct link can reduce dropouts when the GamePad is close to the PC. [Microsoft's setup guide](https://support.microsoft.com/en-us/windows/experience/connectivity-networking/use-your-windows-device-as-a-mobile-hotspot)
+
 If the link drops, the app releases the controls, pauses video, and tries to recover for 20 seconds at the same IP address. Video resumes with a keyframe. The video bitrate cap starts at 3.2 Mb/s and adapts to retransmission requests. The app shows the cap and the request rate during streaming. Audio uses additional bandwidth.
 
 ## Controls and media

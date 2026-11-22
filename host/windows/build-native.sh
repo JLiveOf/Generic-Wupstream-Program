@@ -9,6 +9,7 @@ x264="${WUPSTREAM_X264_DIR:-$PWD/../build/host/x264-windows-simd}"
 if [ ! -f "$x264/configure" ]; then
     mkdir -p "$x264"
     git -C "$x264" init -q
+    git -C "$x264" config core.autocrlf false
     git -C "$x264" fetch -q --depth 1 https://github.com/mirror/x264.git "$revision"
     git -C "$x264" checkout -q FETCH_HEAD
 fi

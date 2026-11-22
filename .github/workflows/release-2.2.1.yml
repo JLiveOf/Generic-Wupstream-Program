@@ -3,7 +3,7 @@ name: Release 2.2.1
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/release-2.2.1.yml]
+    paths: [.github/workflows/release-2.2.1.yml, .gitattributes, host/windows/build-native.sh]
   workflow_dispatch:
 
 jobs:

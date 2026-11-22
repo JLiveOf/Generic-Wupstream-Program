@@ -14,6 +14,8 @@ El selector **Español / English** cambia el idioma de la app antes de conectar.
 
 El instalador en español e inglés instala la app para el usuario actual, crea un acceso en Inicio y añade una entrada de desinstalación. ViGEmBus se obtiene por separado. Cierra la app antes de actualizarla.
 
+**Consejo de conexión.** Si tu PC tiene Wi-Fi, prueba a crear una red local para el GamePad en **Configuración → Red e Internet → Zona con cobertura inalámbrica móvil**. Elige compartir por Wi-Fi y conecta el GamePad a esa red desde **Homebrew Menu → Settings → Network → Wi-Fi**. Abre WUP Stream y usa en la app de PC la nueva IP que muestra el mando. Si el PC y el GamePad están cerca, este enlace directo puede reducir los cortes. [Guía de Microsoft](https://support.microsoft.com/es-es/windows/experience/connectivity-networking/use-your-windows-device-as-a-mobile-hotspot)
+
 Si el enlace se interrumpe, la app suelta los controles, pausa el vídeo e intenta recuperar la sesión durante 20 segundos en la misma IP. Al volver el GamePad, el vídeo arranca con un fotograma clave. El vídeo empieza con un límite de 3,2 Mb/s y lo ajusta según las solicitudes de reenvío. La ventana muestra ambos valores durante la transmisión. El sonido también ocupa ancho de banda además del vídeo.
 
 ## Controles y multimedia
