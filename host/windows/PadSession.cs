@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Wire format and input layout from pad/main.c and host/wupstream.c.
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Net;
@@ -8,6 +9,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Nefarius.ViGEm.Client;
+using Nefarius.ViGEm.Client.Exceptions;
 using Nefarius.ViGEm.Client.Targets;
 using Nefarius.ViGEm.Client.Targets.Xbox360;
 
@@ -76,6 +78,7 @@ namespace WupPad
         internal Rectangle Monitor;
         internal bool Video, Audio, Microphone, Cable;
         internal string Recording;
+        internal int CaptureFps, Quality;
         internal volatile bool Touch, XboxLayout;
         internal volatile int Brightness = -1;
         internal long VibrationUntil;
@@ -107,28 +110,46 @@ namespace WupPad
 
             publish(string.Format(Language.Get("Sincronizando con {0}…"), address), null);
             Native.Cancel cancel = delegate { return stop.IsCancellationRequested ? 1 : 0; };
-            IntPtr pad = Native.host_open(address.ToString(), 9000, cancel);
+            IntPtr pad = Native.host_open_settings(address.ToString(), 9000, cancel, 0,
+                options.Quality == 0 ? 0 : new[] { 0, 1800, 3200, 5500 }[options.Quality]);
             GC.KeepAlive(cancel);
             if (pad == IntPtr.Zero)
             {
                 stop.ThrowIfCancellationRequested();
-                throw new InvalidOperationException(string.Format(Language.Get("No se pudo sincronizar con {0}. Abre WUP Stream y revisa su IP."), address));
+                throw new InvalidOperationException(string.Format(Language.Get("No se pudo sincronizar con {0}. Abre el WUP Stream oficial y revisa su IP."), address));
             }
             try
             {
                 stop.ThrowIfCancellationRequested();
-                using (var client = new ViGEmClient())
+                ViGEmClient client = null;
+                IXbox360Controller controller = null;
+                try
                 {
-                    var controller = client.CreateXbox360Controller();
-                    controller.AutoSubmitReport = false;
-                    controller.FeedbackReceived += OnFeedback;
-                    controller.Connect();
-                    try { ReceiveControls(pad, controller, address); }
-                    finally
+                    try
                     {
-                        controller.FeedbackReceived -= OnFeedback;
-                        controller.Disconnect();
+                        client = new ViGEmClient();
+                        var target = client.CreateXbox360Controller();
+                        target.AutoSubmitReport = false;
+                        target.Connect();
+                        controller = target;
+                        controller.FeedbackReceived += OnFeedback;
                     }
+                    catch (VigemBusNotFoundException) { }
+                    catch (VigemNoFreeSlotException) { }
+                    catch (Win32Exception) { }
+                    ReceiveControls(pad, controller, address);
+                }
+                finally
+                {
+                    try
+                    {
+                        if (controller != null)
+                        {
+                            controller.FeedbackReceived -= OnFeedback;
+                            controller.Disconnect();
+                        }
+                    }
+                    finally { if (client != null) client.Dispose(); }
                 }
             }
             finally { Native.host_close(pad); }
@@ -140,8 +161,12 @@ namespace WupPad
             using (var videoStop = CancellationTokenSource.CreateLinkedTokenSource(stop))
             {
                 CancellationToken videoToken = videoStop.Token;
-                Task video = options.Video ? Task.Factory.StartNew(() => desktop.Run(pad, videoToken),
-                    CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default) : null;
+                int captureFps = options.CaptureFps > 0 ? options.CaptureFps : 30;
+                Task video = Task.Factory.StartNew(() =>
+                {
+                    if (options.Video) desktop.Run(pad, videoToken, captureFps);
+                    else DesktopStream.ShowControllerMode(pad, videoToken);
+                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
                 try
                 {
                     using (var audio = new PadAudio(options))
@@ -181,8 +206,11 @@ namespace WupPad
                     if (!recovering)
                     {
                         desktop.ReleaseTouch();
-                        controller.ResetReport();
-                        controller.SubmitReport();
+                        if (controller != null)
+                        {
+                            controller.ResetReport();
+                            controller.SubmitReport();
+                        }
                         Native.host_rumble(pad, 0);
                         motor = false;
                         lastSequence = -1;
@@ -220,7 +248,7 @@ namespace WupPad
                 {
                     lastSequence = sequence;
                     lastXboxLayout = xboxLayout;
-                    Submit(controller, new PadState(report, centers), xboxLayout);
+                    if (controller != null) Submit(controller, new PadState(report, centers), xboxLayout);
                 }
                 desktop.Touch(options.Video && options.Touch && aux[0] != 0, aux[1], aux[2]);
 
@@ -244,9 +272,14 @@ namespace WupPad
                         MicLevel = audio.Level, AudioStatus = audio.Status, Backlight = aux[10], Volume = aux[9],
                         Accel = new[] { aux[3], aux[4], aux[5] }, Gyro = new[] { aux[6], aux[7], aux[8] }
                     };
-                    string status = options.Video ? connected + string.Format(
+                    if (controller == null)
+                    {
+                        if (!string.IsNullOrEmpty(view.AudioStatus)) view.AudioStatus += "  ·  ";
+                        view.AudioStatus += Language.Get("Mando virtual no disponible");
+                    }
+                    string status = !options.Video ? connected : connected + string.Format(
                         Language.Get("  ·  Límite {0:0.0} Mb/s  ·  Solicitudes de reenvío {1:0.0} %"),
-                        aux[12] / 1000.0, aux[13] / 10.0) : connected;
+                        aux[12] / 1000.0, aux[13] / 10.0);
                     publish(status, view);
                     repaintAt = now + 45;
                 }

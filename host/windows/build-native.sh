@@ -36,5 +36,5 @@ if ! grep -qx '#define HAVE_MMX 1' "$x264/config.h"; then
 fi
 
 gcc -shared -static -O2 -Wall -Wextra -I"$x264" wupstream.c \
-    windows/StreamBridge.c windows/WindowsAudio.c "$x264/libx264.a" \
-    -lwinpthread -lws2_32 -lwinmm -lole32 -luuid -o "$WUPSTREAM_NATIVE_DEST"
+    windows/StreamBridge.c windows/WindowsAudio.c windows/DesktopCapture.c "$x264/libx264.a" \
+    -lwinpthread -lws2_32 -lwinmm -ld3d11 -ldxgi -ldxguid -lole32 -luuid -o "$WUPSTREAM_NATIVE_DEST"

@@ -7,7 +7,13 @@
 EXPORT wupstream *host_open(const char *ip, int timeout, int (*cancel)(void *)) {
     return wupstream_open_cancel(ip, timeout, cancel, NULL);
 }
+EXPORT wupstream *host_open_profile(const char *ip, int timeout, int (*cancel)(void *), int light_video) {
+    return wupstream_open_profile(ip, timeout, cancel, NULL, light_video);
+}
 
+EXPORT wupstream *host_open_settings(const char *ip, int timeout, int (*cancel)(void *), int light_video, int max_kbps) {
+    return wupstream_open_settings(ip, timeout, cancel, NULL, light_video, max_kbps);
+}
 EXPORT void host_close(wupstream *w) { wupstream_close(w); }
 EXPORT void host_interrupt(wupstream *w) { wupstream_interrupt(w); }
 EXPORT int host_frame(wupstream *w, const void *pixels, int stride) {

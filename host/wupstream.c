@@ -38,6 +38,7 @@ struct wupstream {
     x264_t *enc;
     x264_picture_t pic;
     uint32_t frame, aseq;
+    int unsupported_receiver;
     int keyframe, gone, have, recovering;
     double last_in, last_hello, last_key, next, last_rumble;
     uint8_t report[128], *slices, apart[16];
@@ -48,7 +49,7 @@ struct wupstream {
     pthread_t thread; pthread_mutex_t mu; pthread_cond_t cv;  /* the sender; mu guards everything here */
     int fresh, took, have_pic, quit, started, sync_ready, sent, repeats;
     struct { uint32_t frame; int len, idr; uint8_t *data, retries[128]; } kept[8];
-    int bitrate, applied_bitrate, adaptive, sent_packets, missing_packets, loss_permille, clean_windows;
+    int bitrate, applied_bitrate, adaptive, max_kbps, sent_packets, missing_packets, loss_permille, clean_windows;
     double rate_window, retry_window;
     int retries_in_window;
     int resent, drop, rumble, rumble_sent, mic, light, light_pad;   /* light: the backlight, 1..6 | keep << 7 (in every hello) */
@@ -86,8 +87,8 @@ static void sample_rate(wupstream *w, double t) {
         if (w->loss_permille > 35) rate_down(w);
         else if (!w->recovering && w->loss_permille < 12 && ++w->clean_windows >= 5) {
             w->clean_windows = 0;
-            if (w->adaptive && w->bitrate < RATE_MAX)
-                w->bitrate = w->bitrate + 300 > RATE_MAX ? RATE_MAX : w->bitrate + 300;
+            if (w->adaptive && w->bitrate < w->max_kbps)
+                w->bitrate = w->bitrate + 300 > w->max_kbps ? w->max_kbps : w->bitrate + 300;
         } else if (w->loss_permille >= 12) w->clean_windows = 0;
     }
     w->sent_packets = w->missing_packets = 0;
@@ -144,6 +145,13 @@ static void pump(wupstream *w) {                               /* what the pad s
             if (w->mic_n < 48000) w->mic_n++;
         }
         if (b[0] == 'I' && n == 136) {
+            /* Official reports use bit 0 for IDR and bits 1–3 for the queue.
+               The experimental JPEG/staged receivers advertise upper bits. */
+            if (b[1] & 0xf0) {
+                w->unsupported_receiver = w->gone = 1;
+                if (w->sync_ready) pthread_cond_broadcast(&w->cv);
+                return;
+            }
             if (w->recovering) {
                 w->recovering = 0;
                 w->vper = 0; w->locked = 0; w->wait_t = 0; w->wait_cur = 7; w->wait_prev = -1;
@@ -178,6 +186,12 @@ wupstream *wupstream_open(const char *ip, int timeout_ms) {
     return wupstream_open_cancel(ip, timeout_ms, NULL, NULL);
 }
 wupstream *wupstream_open_cancel(const char *ip, int timeout_ms, int (*cancel)(void *), void *context) {
+    return wupstream_open_profile(ip, timeout_ms, cancel, context, 0);
+}
+wupstream *wupstream_open_profile(const char *ip, int timeout_ms, int (*cancel)(void *), void *context, int light_video) {
+    return wupstream_open_settings(ip, timeout_ms, cancel, context, light_video, 0);
+}
+wupstream *wupstream_open_settings(const char *ip, int timeout_ms, int (*cancel)(void *), void *context, int light_video, int max_kbps) {
 #ifdef _WIN32
     WSADATA wd; if (WSAStartup(MAKEWORD(2, 2), &wd)) return NULL;
     timeBeginPeriod(1);
@@ -232,7 +246,7 @@ wupstream *wupstream_open_cancel(const char *ip, int timeout_ms, int (*cancel)(v
     }
     while (!w->have || !w->locked || now() - w->last_in >= LINK_PAUSE) {
         pump(w);
-        if (now() > end || (cancel && cancel(context))) { wupstream_close(w); return 0; }
+        if (w->unsupported_receiver || now() > end || (cancel && cancel(context))) { wupstream_close(w); return 0; }
         nap();
     }
     x264_param_t p;
@@ -245,10 +259,13 @@ wupstream *wupstream_open_cancel(const char *ip, int timeout_ms, int (*cancel)(v
     for (unsigned i = 0; i < sizeof drc / sizeof *drc; i++) x264_param_parse(&p, drc[i][0], drc[i][1]);
     /* An explicit bitrate keeps the fixed-rate behavior used by test tools. */
     int fixed = getenv("WUPSTREAM_KBPS") ? atoi(getenv("WUPSTREAM_KBPS")) : 0;
+    if (light_video && max_kbps == 0) fixed = 1800;
+    w->max_kbps = max_kbps >= RATE_MIN && max_kbps <= RATE_MAX ? max_kbps : RATE_MAX;
     w->adaptive = fixed <= 0;
-    int kbps = w->adaptive ? RATE_START : fixed;
+    int kbps = w->adaptive ? (w->max_kbps < RATE_START ? w->max_kbps : RATE_START) : fixed;
     p.i_width = WUPSTREAM_W; p.i_height = WUPSTREAM_H; p.i_csp = X264_CSP_I420; p.i_fps_num = 60; p.i_fps_den = 1;
     p.rc.i_rc_method = X264_RC_CRF; p.rc.f_rf_constant = getenv("WUPSTREAM_CRF") ? (float)atof(getenv("WUPSTREAM_CRF")) : 18;
+    if (light_video) p.rc.f_rf_constant = 25;
     p.rc.i_vbv_max_bitrate = kbps; p.rc.i_vbv_buffer_size = kbps / 60;
     p.i_log_level = getenv("WUPSTREAM_DEBUG") ? X264_LOG_INFO : X264_LOG_ERROR;
     if (getenv("WUPSTREAM_X264")) {                                  /* more x264 settings, "key=value:key=value" */

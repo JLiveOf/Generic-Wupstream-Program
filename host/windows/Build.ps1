@@ -41,7 +41,8 @@ try {
 
     $exe = Join-Path $destination 'Generic Wupstream Program.exe'
     $files = (Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.cs').FullName
-    & $compiler /nologo /codepage:65001 /warnaserror /optimize+ /target:winexe /platform:x64 "/r:$standard" "/r:$dll" "/out:$exe" $files
+    $icon = Join-Path $PSScriptRoot '../assets/app.ico'
+    & $compiler /nologo /codepage:65001 /warnaserror /optimize+ /target:winexe /platform:x64 "/win32icon:$icon" "/r:$standard" "/r:$dll" "/out:$exe" $files
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la aplicación.' }
     Copy-Item -LiteralPath $dll -Destination $destination
 }

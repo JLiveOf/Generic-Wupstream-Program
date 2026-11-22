@@ -1,0 +1,99 @@
+name: Release 2.2.1
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-2.2.1.yml]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: git make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm
+      - name: Build Windows native engine
+        shell: msys2 {0}
+        run: |
+          mkdir -p build/windows
+          export WUPSTREAM_NATIVE_DEST="$PWD/build/windows/WupStreamNative.dll"
+          bash host/windows/build-native.sh
+      - name: Build Windows app and installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $package = Join-Path $env:RUNNER_TEMP 'vigem.zip'
+          $unpacked = Join-Path $env:RUNNER_TEMP 'vigem'
+          Invoke-WebRequest 'https://api.nuget.org/v3-flatcontainer/nefarius.vigem.client/1.21.256/nefarius.vigem.client.1.21.256.nupkg' -OutFile $package
+          if ((Get-FileHash $package).Hash -ne 'FF460031B33E0882CD1166FE2D072D0FE97578480C61ED85DCCFA6C930FDB55E') { throw 'Unexpected ViGEm hash' }
+          Expand-Archive $package $unpacked
+          $lib = Join-Path $unpacked 'lib/netstandard2.0/Nefarius.ViGEm.Client.dll'
+          $framework = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319'
+          $sources = (Get-ChildItem host/windows -Filter '*.cs').FullName
+          & "$framework/csc.exe" /nologo /codepage:65001 /warnaserror /optimize+ /platform:x64 /target:winexe /win32icon:host/assets/app.ico "/r:$framework/netstandard.dll" "/r:$lib" "/out:build/windows/Generic Wupstream Program.exe" $sources
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item $lib build/windows
+          $nsis = Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe'
+          if (!(Test-Path $nsis)) { choco install nsis -y --no-progress }
+          ./host/windows/BuildSetup.ps1 -MakeNsis $nsis -Output build/windows/Generic-Wupstream-Program-v2.2.1-Setup-win-x64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup
+          path: build/windows/Generic-Wupstream-Program-v2.2.1-Setup-win-x64.exe
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Linux x64 package
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nasm
+          mkdir -p build/linux
+          curl -fsSL https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz | tar -xJ -C build/linux
+          zig="$PWD/build/linux/zig-x86_64-linux-0.14.1/zig"
+          export CC="$zig cc -target x86_64-linux-gnu.2.28" AR="$zig ar" RANLIB="$zig ranlib"
+          git init -q build/linux/x264
+          git -C build/linux/x264 fetch -q --depth 1 https://github.com/mirror/x264.git b35605ace3ddf7c1a5d67a2eb553f034aef41d55
+          git -C build/linux/x264 checkout -q FETCH_HEAD
+          git -C build/linux/x264 apply "$PWD/host/x264-drh-mode.patch"
+          (cd build/linux/x264 && ./configure --host=x86_64-linux-gnu --enable-static --enable-pic --disable-cli --disable-opencl --bit-depth=8 && make -j4 libx264.a)
+          "$zig" cc -target x86_64-linux-gnu.2.28 -O2 -Wall -Werror -fPIC -shared -Ibuild/linux/x264 host/wupstream.c build/linux/x264/libx264.a -lm -pthread -o build/linux/libwupstream.so
+          python3 -m py_compile host/linux/generic-wupstream host/linux/build-deb.py
+          python3 host/linux/build-deb.py build/linux/generic-wupstream_2.2.1+experimental.1_amd64.deb build/linux/libwupstream.so
+          dpkg-deb --info build/linux/generic-wupstream_2.2.1+experimental.1_amd64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: build/linux/generic-wupstream_2.2.1+experimental.1_amd64.deb
+          if-no-files-found: error
+
+  publish:
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+      - shell: bash
+        run: |
+          if ! gh release view v2.2.1 >/dev/null 2>&1; then
+            gh release create v2.2.1 assets/windows-setup/* --target "$GITHUB_SHA" --latest \
+              --title "Generic Wupstream Program 2.2.1 | Windows" \
+              --notes "Windows x64 installer. Uses the official WUP Stream GamePad receiver. Includes frame-rate and quality selectors and a bilingual controller-mode screen."
+          fi
+          if ! gh release view v2.2.1-linux.1 >/dev/null 2>&1; then
+            gh release create v2.2.1-linux.1 assets/linux-deb/* --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Generic Wupstream Program 2.2.1 | Linux experimental" \
+              --notes "Experimental amd64 .deb for X11 and Wayland. Uses the official WUP Stream receiver. Report a problem opens an issue with a preview of the session diagnostics. Audio and virtual controller support are pending on Linux."
+          fi

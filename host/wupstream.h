@@ -45,7 +45,9 @@ typedef struct {
 wupstream *wupstream_open(const char *ip, int timeout_ms);   /* NULL ip: the first GamePad waiting; NULL if none answered.
                                                                 Several GamePads: one wupstream each. */
 wupstream *wupstream_open_cancel(const char *ip, int timeout_ms, int (*cancel)(void *), void *context);
+wupstream *wupstream_open_profile(const char *ip, int timeout_ms, int (*cancel)(void *), void *context, int light_video);
 int wupstream_link(wupstream *w, int *age_ms, int *kbps, int *resend_permille); /* 1: recovering, 0: live, -1: closed */
+wupstream *wupstream_open_settings(const char *ip, int timeout_ms, int (*cancel)(void *), void *context, int light_video, int max_kbps);
 void wupstream_interrupt(wupstream *w); /* wake blocked frame calls before joining a producer and closing */
 int wupstream_frame(wupstream *w, const void *pixels, int stride, int format);   /* 0, or -1: the GamePad is gone; paced to its refresh */
 int wupstream_audio(wupstream *w, const int16_t *lr, int frames);                /* 16-bit L,R pairs at 48 kHz */

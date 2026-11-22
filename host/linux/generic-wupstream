@@ -1,0 +1,287 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+import ctypes
+import ipaddress
+import os
+import threading
+import uuid
+import webbrowser
+from collections import deque
+from urllib.parse import urlencode
+
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gst", "1.0")
+from gi.repository import Gio, GLib, Gst, Gtk
+
+PORTAL = "org.freedesktop.portal.Desktop"
+PORTAL_PATH = "/org/freedesktop/portal/desktop"
+SCREENCAST = "org.freedesktop.portal.ScreenCast"
+ISSUES = "https://github.com/JLiveOf/Generic-Wupstream-Program/issues/new"
+VERSION = "2.2.1+experimental.1"
+
+
+class ScreenCast:
+    def __init__(self):
+        self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        self.session = None
+        self.fd = None
+
+    def request(self, method, signature, arguments, options):
+        token = "wup_" + uuid.uuid4().hex
+        options["handle_token"] = GLib.Variant("s", token)
+        sender = self.bus.get_unique_name()[1:].replace(".", "_")
+        path = f"{PORTAL_PATH}/request/{sender}/{token}"
+        loop = GLib.MainLoop()
+        response = []
+
+        def received(bus, sender, object_path, interface, signal, parameters, *_):
+            response.extend(parameters.unpack())
+            loop.quit()
+
+        listener = self.bus.signal_subscribe(PORTAL, "org.freedesktop.portal.Request",
+                                             "Response", path, None, Gio.DBusSignalFlags.NONE, received)
+        deadline = GLib.timeout_source_new_seconds(90)
+        deadline.set_callback(lambda *_: loop.quit() or GLib.SOURCE_REMOVE)
+        deadline.attach(None)
+        try:
+            handle = self.bus.call_sync(PORTAL, PORTAL_PATH, SCREENCAST, method,
+                                        GLib.Variant(signature, (*arguments, options)), None,
+                                        Gio.DBusCallFlags.NONE, 5000, None).unpack()[0]
+            if handle != path:
+                raise RuntimeError("El portal devolvió una ruta de solicitud inesperada.")
+            if not response:
+                loop.run()
+            if not response:
+                self.bus.call(PORTAL, path, "org.freedesktop.portal.Request", "Close",
+                              None, None, Gio.DBusCallFlags.NONE, 1000, None, None)
+                raise RuntimeError("El portal de captura no respondió.")
+            if response[0] != 0:
+                raise RuntimeError("Se canceló la captura de pantalla.")
+            return response[1]
+        finally:
+            deadline.destroy()
+            self.bus.signal_unsubscribe(listener)
+
+    def open(self):
+        session_token = GLib.Variant("s", "wup_" + uuid.uuid4().hex)
+        self.session = self.request("CreateSession", "(a{sv})", (),
+                                    {"session_handle_token": session_token})["session_handle"]
+        modes = self.bus.call_sync(PORTAL, PORTAL_PATH, "org.freedesktop.DBus.Properties", "Get",
+                                   GLib.Variant("(ss)", (SCREENCAST, "AvailableCursorModes")), None,
+                                   Gio.DBusCallFlags.NONE, 3000, None).unpack()[0]
+        self.request("SelectSources", "(oa{sv})", (self.session,),
+                     {"types": GLib.Variant("u", 1), "cursor_mode": GLib.Variant("u", 2 if modes & 2 else 1)})
+        stream = self.request("Start", "(osa{sv})", (self.session, ""), {})["streams"][0][0]
+        result, descriptor_list = self.bus.call_with_unix_fd_list_sync(
+            PORTAL, PORTAL_PATH, SCREENCAST, "OpenPipeWireRemote",
+            GLib.Variant("(oa{sv})", (self.session, {})), None,
+            Gio.DBusCallFlags.NONE, 5000, None, None)
+        self.fd = descriptor_list.get(result.unpack()[0])
+        return f"pipewiresrc fd={self.fd} path={stream}"
+
+    def close(self):
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+        if self.session:
+            self.bus.call(PORTAL, self.session, "org.freedesktop.portal.Session", "Close",
+                          None, None, Gio.DBusCallFlags.NONE, 1000, None, None)
+            self.session = None
+
+
+CANCEL = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)
+WIDTH, HEIGHT = 854, 480
+
+
+def native_library():
+    lib = ctypes.CDLL("/usr/lib/generic-wupstream/libwupstream.so")
+    lib.wupstream_open_settings.argtypes = [ctypes.c_char_p, ctypes.c_int, CANCEL, ctypes.c_void_p,
+                                            ctypes.c_int, ctypes.c_int]
+    lib.wupstream_open_settings.restype = ctypes.c_void_p
+    lib.wupstream_frame.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+    lib.wupstream_frame.restype = ctypes.c_int
+    lib.wupstream_link.argtypes = [ctypes.c_void_p] + [ctypes.POINTER(ctypes.c_int)] * 3
+    lib.wupstream_link.restype = ctypes.c_int
+    lib.wupstream_close.argtypes = [ctypes.c_void_p]
+    lib.wupstream_close.restype = None
+    return lib
+
+
+class Window(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Generic Wupstream Program")
+        self.set_border_width(18)
+        self.set_default_size(440, 230)
+        self.set_icon_name("generic-wupstream")
+        self.pipeline = self.portal = self.worker = None
+        self.cancel = threading.Event()
+        self.logs = deque([f"Versión: {VERSION}"], maxlen=24)
+        self.closing = False
+        self.pending = False
+        grid = Gtk.Grid(column_spacing=12, row_spacing=10)
+        self.add(grid)
+        self.address = Gtk.Entry(placeholder_text="192.168.1.42", hexpand=True)
+        self.fps = self.combo(["15", "24", "30", "45", "60"], 2)
+        self.quality = self.combo(["Baja", "Media", "Alta"], 1)
+        self.backend = self.combo(["Automática", "X11", "Wayland (PipeWire)"], 0)
+        self.button = Gtk.Button(label="Conectar")
+        self.button.connect("clicked", self.toggle)
+        report = Gtk.Button(label="Reportar un problema en GitHub")
+        report.connect("clicked", self.report_issue)
+        self.status = Gtk.Label(label="Abre el WUP Stream oficial en el GamePad.", xalign=0, wrap=True)
+        for row, (label, widget) in enumerate((("IP del GamePad", self.address), ("Captura", self.backend),
+                                               ("FPS", self.fps), ("Calidad", self.quality))):
+            grid.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
+            grid.attach(widget, 1, row, 1, 1)
+        grid.attach(self.button, 1, 4, 1, 1)
+        grid.attach(self.status, 0, 5, 2, 1)
+        grid.attach(report, 0, 6, 2, 1)
+        self.connect("delete-event", self.on_close)
+        self.connect("destroy", lambda *_: Gtk.main_quit())
+
+    @staticmethod
+    def combo(labels, selected):
+        control = Gtk.ComboBoxText()
+        for label in labels:
+            control.append_text(label)
+        control.set_active(selected)
+        return control
+
+    def on_close(self, *_):
+        if self.pending:
+            return True
+        if self.worker:
+            self.closing = True
+            self.cancel.set()
+            return True
+        return False
+
+    def report_issue(self, *_):
+        details = "\n".join(self.logs.copy())
+        dialog = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.INFO,
+                                   text="Revisa el diagnóstico antes de abrir el issue")
+        dialog.format_secondary_text(details)
+        dialog.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Abrir GitHub", Gtk.ResponseType.OK)
+        accepted = dialog.run() == Gtk.ResponseType.OK
+        dialog.destroy()
+        if accepted:
+            body = ("## Qué ocurrió\n\n\n## Cómo reproducirlo\n\n\n"
+                    "## Diagnóstico de Generic Wupstream\n\n```text\n" + details + "\n```\n")
+            try:
+                opened = webbrowser.open(ISSUES + "?" + urlencode({"title": "[Linux] ", "body": body}))
+            except webbrowser.Error:
+                opened = False
+            if not opened:
+                self.status.set_text("No se pudo abrir el navegador.")
+
+    def toggle(self, *_):
+        if self.worker:
+            self.cancel.set()
+            self.button.set_sensitive(False)
+            return
+        self.pending = True
+        self.button.set_sensitive(False)
+        stage = "dirección"
+        try:
+            address = str(ipaddress.IPv4Address(self.address.get_text().strip()))
+            selected = self.backend.get_active()
+            wayland = selected == 2 or (selected == 0 and
+                      (os.environ.get("XDG_SESSION_TYPE") == "wayland" or bool(os.environ.get("WAYLAND_DISPLAY"))))
+            self.logs.append(f"Captura: {'Wayland' if wayland else 'X11'} · "
+                             f"FPS: {self.fps.get_active_text()} · Calidad: {self.quality.get_active_text()}")
+            stage = "portal" if wayland else "captura X11"
+            if wayland:
+                self.portal = ScreenCast()
+                source = self.portal.open()
+            else:
+                source = "ximagesrc use-damage=false show-pointer=true"
+            fps = int(self.fps.get_active_text())
+            bitrate = [1800, 3200, 5500][self.quality.get_active()]
+            stage = "pipeline GStreamer"
+            self.pipeline = Gst.parse_launch(
+                f"{source} ! videoconvert ! videorate drop-only=true ! videoscale add-borders=true"
+                f" ! video/x-raw,format=BGRA,width={WIDTH},height={HEIGHT},pixel-aspect-ratio=1/1,framerate={fps}/1"
+                " ! appsink name=out max-buffers=1 drop=true sync=false")
+            self.cancel.clear()
+            self.status.set_text("Esperando al WUP Stream oficial…")
+            self.worker = threading.Thread(target=self.stream, args=(address, bitrate))
+            self.worker.start()
+            self.button.set_label("Desconectar")
+        except (OSError, ValueError, RuntimeError, GLib.Error, KeyError, IndexError) as error:
+            self.logs.append(f"Error en {stage}: {type(error).__name__}")
+            self.finish(str(error))
+        finally:
+            self.pending = False
+            self.button.set_sensitive(True)
+
+    def stream(self, address, bitrate):
+        pad = None
+        result = "Desconectado"
+        stage = "motor nativo"
+        try:
+            lib = native_library()
+            stage = "conexión al receptor oficial"
+            expired = CANCEL(lambda _: int(self.cancel.is_set()))
+            pad = lib.wupstream_open_settings(address.encode(), 9000, expired, None, 0, bitrate)
+            if not pad:
+                if not self.cancel.is_set():
+                    result = "No se pudo conectar. Abre el WUP Stream oficial y verifica su IP."
+                    self.logs.append("El receptor oficial no respondió o no se pudo inicializar el motor.")
+                return
+            self.logs.append("Conexión establecida")
+            stage = "captura GStreamer"
+            if self.pipeline.set_state(Gst.State.PLAYING) == Gst.StateChangeReturn.FAILURE:
+                raise RuntimeError("No se pudo iniciar la captura.")
+            GLib.idle_add(self.status.set_text, "Conectado · H.264 854 × 480")
+            sink = self.pipeline.get_by_name("out")
+            bus = self.pipeline.get_bus()
+            age, kbps, retries = ctypes.c_int(), ctypes.c_int(), ctypes.c_int()
+            while not self.cancel.is_set():
+                message = bus.pop_filtered(Gst.MessageType.ERROR | Gst.MessageType.EOS)
+                if message:
+                    raise RuntimeError(message.parse_error()[0].message if message.type == Gst.MessageType.ERROR
+                                       else "Terminó la captura de pantalla.")
+                link = lib.wupstream_link(pad, ctypes.byref(age), ctypes.byref(kbps), ctypes.byref(retries))
+                if link < 0:
+                    self.logs.append(f"Enlace perdido · Sin respuesta: {age.value} ms · Límite: {kbps.value} kbps")
+                    raise RuntimeError("Se perdió la conexión con el GamePad.")
+                sample = sink.emit("try-pull-sample", 50 * Gst.MSECOND)
+                if sample and not link:
+                    buffer = sample.get_buffer()
+                    if buffer.get_size() != WIDTH * HEIGHT * 4:
+                        raise RuntimeError("La captura devolvió un formato de imagen inesperado.")
+                    data = buffer.extract_dup(0, buffer.get_size())
+                    if lib.wupstream_frame(pad, data, WIDTH * 4, 1):
+                        raise RuntimeError("Se perdió la conexión con el GamePad.")
+        except (OSError, RuntimeError, GLib.Error) as error:
+            self.logs.append(f"Error en {stage}: {type(error).__name__}")
+            result = str(error)
+        finally:
+            if pad:
+                lib.wupstream_close(pad)
+            if self.cancel.is_set():
+                self.logs.append("Desconexión manual")
+            GLib.idle_add(self.finish, result)
+
+    def finish(self, message):
+        self.worker = None
+        if self.pipeline:
+            self.pipeline.set_state(Gst.State.NULL)
+            self.pipeline = None
+        if self.portal:
+            self.portal.close()
+            self.portal = None
+        self.button.set_label("Conectar")
+        self.button.set_sensitive(True)
+        self.status.set_text(message)
+        if self.closing:
+            self.destroy()
+
+
+if __name__ == "__main__":
+    Gst.init(None)
+    window = Window()
+    window.show_all()
+    Gtk.main()

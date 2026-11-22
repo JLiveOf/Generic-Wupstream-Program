@@ -9,7 +9,7 @@ El selector **Español / English** cambia el idioma de la app antes de conectar.
 ## Conectar
 
 1. En el GamePad, abre el **Homebrew Menu**, conéctalo al Wi‑Fi desde **Settings** e instala **WUP Stream** desde la **App Store**. Si aún no tienes el menú, sigue la [guía del autor](https://github.com/ravensclawx/wup-homebrew#get-it). El método habitual usa una Wii U con Aroma y el firmware 7677 del GamePad.
-2. Abre WUP Stream hasta que aparezca **Waiting for a Stream**. El GamePad y el PC deben estar en la misma red. El PC puede usar Ethernet.
+2. Abre el **WUP Stream** oficial hasta que aparezca **Waiting for a Stream** y apunta la dirección IP. El GamePad y el PC deben estar en la misma red.
 3. En Windows 10 u 11 x64 con .NET Framework 4.8 y [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases/latest), ejecuta el instalador de [Releases](https://github.com/JLiveOf/Generic-Wupstream-Program/releases) o extrae el ZIP portátil. Abre **Generic Wupstream Program**, selecciona el monitor, introduce la IP del GamePad y pulsa **Conectar por IP**. Puedes dejar el campo vacío para buscar el GamePad por UDP 50001. Si Windows pide permiso para la búsqueda, selecciona la red privada.
 
 El instalador en español e inglés instala la app para el usuario actual, crea un acceso en Inicio y añade una entrada de desinstalación. ViGEmBus se obtiene por separado. Cierra la app antes de actualizarla.
@@ -19,6 +19,8 @@ Si el enlace se interrumpe, la app suelta los controles, pausa el vídeo e inten
 ## Controles y multimedia
 
 - **Enviar pantalla** captura el monitor seleccionado y mantiene su proporción en los 854 × 480 píxeles del GamePad. La captura funciona con aplicaciones normales y juegos en ventana o sin bordes. El escritorio seguro, el contenido protegido y algunos juegos a pantalla completa exclusiva pueden aparecer negros.
+- Elige **FPS** (de 15 a 60 fps de captura) y **Calidad** antes de conectar. El emisor repite fotogramas para mantener el ritmo de la pantalla del GamePad. La calidad baja, media y alta limita el bitrate a 1,8, 3,2 y 5,5 Mb/s, respectivamente.
+- Desactiva **Enviar pantalla** para que el GamePad muestre **Modo mando** sin capturar el escritorio.
 - **Enviar audio del PC** copia el sonido de la salida predeterminada de Windows al GamePad. El audio sigue activo también en el PC. El volumen del GamePad se regula con su deslizador.
 - **Táctil como ratón** activa clic izquierdo y arrastre con el lápiz o el dedo en la imagen del monitor. Se puede activar y desactivar durante la conexión. Está desactivado al iniciar la aplicación.
 - **Probar vibración** activa el motor durante un tercio de segundo. Los juegos que usan la vibración del mando virtual también pueden activarlo. El selector **Brillo** ajusta la pantalla durante la conexión.
@@ -27,6 +29,10 @@ Si el enlace se interrumpe, la app suelta los controles, pausa el vídeo e inten
 - **Probar en Windows** abre el panel de mandos. Deja los sticks en reposo al conectar para que se calibren. De forma predeterminada, A, B, X e Y siguen las letras impresas. Activa **ABXY por posición Xbox** para intercambiar A/B y X/Y y que los botones coincidan con las posiciones de un mando Xbox. Puedes cambiarlo mientras juegas. **+** es Start, **−** es Back y **HOME** es Guide. La ventana muestra valores de acelerómetro y giroscopio para diagnóstico. El mando XInput solo transporta botones, sticks, gatillos y vibración.
 
 La cámara, el NFC/Amiibo y el infrarrojo requieren soporte adicional en el software del GamePad. WUP Stream no transmite esos periféricos. El enlace usa UDP sin cifrar en la red local.
+
+## Linux
+
+La [guía del paquete Linux](host/linux/README.md) cubre la captura en X11 y Wayland.
 
 ## Compilar y licencias
 

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Generic Wupstream Program
+Comment=Stream the desktop to a Wii U GamePad
+Comment[es]=Envía el escritorio a un Wii U GamePad
+Exec=generic-wupstream
+Icon=generic-wupstream
+Terminal=false
+Categories=AudioVideo;Video;

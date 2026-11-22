@@ -6,7 +6,7 @@ Unicode true
 !include "WinVer.nsh"
 
 !define Product "Generic Wupstream Program"
-!define Version "2.1.1"
+!define Version "2.2.1"
 !define Exe "${Product}.exe"
 !define UninstallKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\GenericWupstreamProgram"
 
@@ -24,6 +24,8 @@ VIAddVersionKey "FileVersion" "${Version}"
 VIAddVersionKey "LegalCopyright" "GPL-3.0-or-later"
 
 !define MUI_ABORTWARNING
+!define MUI_ICON "..\assets\app.ico"
+!define MUI_UNICON "..\assets\app.ico"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${Exe}"
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 !insertmacro MUI_PAGE_WELCOME
@@ -121,6 +123,8 @@ Section "Uninstall"
   Delete "$INSTDIR\${Exe}"
   Delete "$INSTDIR\WupStreamNative.dll"
   Delete "$INSTDIR\Nefarius.ViGEm.Client.dll"
+  Delete "$INSTDIR\wup_stream_jpeg_test.wup"
+  Delete "$INSTDIR\wup_stream_native_60.wup"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\README.en.md"
   Delete "$INSTDIR\LICENSE"

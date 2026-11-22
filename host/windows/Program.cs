@@ -61,6 +61,7 @@ namespace WupPad
         private readonly Button record;
         private readonly Button vibrate;
         private readonly ComboBox monitor;
+        private readonly ComboBox frameRate, videoQuality;
         private readonly ComboBox brightness;
         private readonly ComboBox language;
         private readonly CheckBox video;
@@ -101,9 +102,10 @@ namespace WupPad
             SuspendLayout();
             Language.English = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName != "es";
             Text = "Generic Wupstream Program";
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             Font = new Font("Segoe UI", 10);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(704, 718);
+            ClientSize = new Size(704, 756);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
@@ -137,16 +139,22 @@ namespace WupPad
             status = AddLabel("", 26, 185, 652, 31, Muted);
 
             AddLabel("Monitor", 26, 222, 71, 27, Ink);
-            monitor = AddCombo("Monitor", 101, 221, 354);
+            monitor = AddCombo("Monitor", 101, 221, 186);
             screens = Screen.AllScreens;
             video = AddCheck("Enviar pantalla", 476, 220, 202, true);
-            audio = AddCheck("Enviar audio del PC", 26, 257, 202, true);
-            touch = AddCheck("Táctil como ratón", 245, 257, 212, false);
-            microphone = AddCheck("Usar micrófono", 476, 257, 202, false);
-            cable = AddCheck("Enviar a VB-CABLE", 26, 292, 202, false);
-            record = AddButton("Grabar WAV…", 245, 289, 212, 33, false);
+            AddLabel("FPS", 26, 255, 70, 27, Ink);
+            frameRate = AddCombo("FPS", 101, 254, 95);
+            frameRate.Items.AddRange(new object[] { 15, 24, 30, 45, 60 });
+            frameRate.SelectedItem = 30;
+            AddLabel("Calidad", 221, 255, 78, 27, Ink);
+            videoQuality = AddCombo("Calidad", 299, 254, 163);
+            audio = AddCheck("Enviar audio del PC", 26, 295, 202, true);
+            touch = AddCheck("Táctil como ratón", 245, 295, 212, false);
+            microphone = AddCheck("Usar micrófono", 476, 295, 202, false);
+            cable = AddCheck("Enviar a VB-CABLE", 26, 330, 202, false);
+            record = AddButton("Grabar WAV…", 245, 327, 212, 33, false);
             record.Click += ChooseRecording;
-            vibrate = AddButton("Probar vibración", 476, 289, 202, 33, false);
+            vibrate = AddButton("Probar vibración", 476, 327, 202, 33, false);
             vibrate.Enabled = false;
             vibrate.Click += delegate
             {
@@ -154,15 +162,15 @@ namespace WupPad
                     Interlocked.Exchange(ref activeOptions.VibrationUntil, Stopwatch.GetTimestamp() + Stopwatch.Frequency / 3);
             };
 
-            AddLabel("Brillo", 26, 327, 56, 27, Ink);
-            brightness = AddCombo("Brillo del GamePad", 82, 327, 130);
+            AddLabel("Brillo", 26, 365, 56, 27, Ink);
+            brightness = AddCombo("Brillo del GamePad", 82, 365, 130);
             brightness.Items.AddRange(new object[] { "Del GamePad", "1", "2", "3", "4", "5", "6" });
             brightness.SelectedIndex = 0;
-            volume = AddLabel("Volumen del GamePad · —", 245, 327, 212, 27, Muted);
-            micMeter.Bounds = new Rectangle(476, 335, 202, 13);
+            volume = AddLabel("Volumen del GamePad · —", 245, 365, 212, 27, Muted);
+            micMeter.Bounds = new Rectangle(476, 373, 202, 13);
             Controls.Add(micMeter);
-            audioStatus = AddLabel("", 26, 358, 652, 42, Muted);
-            telemetry = AddLabel("Acelerómetro · —     Giroscopio · —", 26, 400, 652, 24, Muted);
+            audioStatus = AddLabel("", 26, 396, 652, 42, Muted);
+            telemetry = AddLabel("Acelerómetro · —     Giroscopio · —", 26, 438, 652, 24, Muted);
             video.CheckedChanged += delegate { UpdateOptions(); };
             microphone.CheckedChanged += delegate { UpdateOptions(); };
             touch.CheckedChanged += delegate
@@ -175,22 +183,22 @@ namespace WupPad
             };
             UpdateOptions();
 
-            Label heading = AddLabel("Controles en directo", 26, 430, 360, 29, Ink);
+            Label heading = AddLabel("Controles en directo", 26, 468, 360, 29, Ink);
             heading.Font = new Font("Segoe UI Semibold", 13);
-            battery = AddLabel("Batería · —", 400, 430, 278, 29, Muted);
+            battery = AddLabel("Batería · —", 438, 430, 278, 29, Muted);
             battery.TextAlign = ContentAlignment.MiddleRight;
-            preview.Bounds = new Rectangle(26, 466, 652, 196);
+            preview.Bounds = new Rectangle(26, 504, 652, 196);
             Controls.Add(preview);
-            AddButton("Probar en Windows", 26, 675, 184, 34, false).Click += delegate
+            AddButton("Probar en Windows", 26, 713, 184, 34, false).Click += delegate
             {
                 Open("joy.cpl");
             };
-            xboxLayout = AddCheck("ABXY por posición Xbox", 229, 678, 225, false);
+            xboxLayout = AddCheck("ABXY por posición Xbox", 229, 716, 225, false);
             xboxLayout.CheckedChanged += delegate
             {
                 if (activeOptions != null) activeOptions.XboxLayout = xboxLayout.Checked;
             };
-            AddButton("Instalar Homebrew Menu", 460, 675, 218, 34, false).Click += delegate
+            AddButton("Instalar Homebrew Menu", 460, 713, 218, 34, false).Click += delegate
             {
                 Open("https://github.com/ravensclawx/wup-homebrew#get-it");
             };
@@ -274,6 +282,7 @@ namespace WupPad
             bool idle = activeOptions == null;
             language.Enabled = idle;
             monitor.Enabled = idle && video.Checked;
+            frameRate.Enabled = videoQuality.Enabled = idle && video.Checked;
             video.Enabled = audio.Enabled = microphone.Enabled = idle;
             cable.Enabled = record.Enabled = idle && microphone.Checked;
             touch.Enabled = video.Checked;
@@ -290,6 +299,12 @@ namespace WupPad
             address.AccessibleName = Language.Get("IP del GamePad, opcional");
             status.AccessibleName = Language.Get("Estado de la conexión");
             monitor.AccessibleName = Language.Get("Monitor");
+            int quality = videoQuality.SelectedIndex;
+            videoQuality.Items.Clear();
+            foreach (var label in new[] { "Baja", "Media", "Alta" }) videoQuality.Items.Add(Language.Get(label));
+            videoQuality.SelectedIndex = quality >= 0 ? quality : 1;
+            videoQuality.AccessibleName = Language.Get("Calidad");
+            tips.SetToolTip(frameRate, Language.Get("Limita los fotogramas capturados. H.264 mantiene el ritmo de la pantalla del GamePad."));
             brightness.AccessibleName = Language.Get("Brillo del GamePad");
             micMeter.AccessibleName = Language.Get("Nivel del micrófono");
             preview.AccessibleName = Language.Get("Estado de botones y sticks");
@@ -355,6 +370,7 @@ namespace WupPad
             {
                 Monitor = screens[monitor.SelectedIndex].Bounds,
                 Video = video.Checked, Audio = audio.Checked, Touch = touch.Checked, XboxLayout = xboxLayout.Checked,
+                CaptureFps = (int)frameRate.SelectedItem, Quality = videoQuality.SelectedIndex + 1,
                 Microphone = microphone.Checked, Cable = microphone.Checked && cable.Checked,
                 Recording = microphone.Checked ? recording : null,
                 Brightness = brightness.SelectedIndex == 0 ? -1 : brightness.SelectedIndex

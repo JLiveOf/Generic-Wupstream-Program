@@ -9,7 +9,7 @@ Choose **Español / English** in the app before you connect.
 ## Connect
 
 1. On the GamePad, open the **Homebrew Menu**, join Wi-Fi from **Settings**, and install **WUP Stream** from the **App Store**. If your GamePad still starts in Nintendo mode, follow the [Homebrew Menu setup guide](https://github.com/ravensclawx/wup-homebrew#get-it). The usual installation uses a Wii U with Aroma and GamePad firmware 7677.
-2. Launch WUP Stream. Leave it on **Waiting for a Stream** and note the IPv4 address. The GamePad and PC must be on the same network. The PC can use Ethernet.
+2. Open the official **WUP Stream** app until **Waiting for a Stream** appears. Note the IPv4 address. The GamePad and PC must be on the same network.
 3. On Windows 10 or 11 x64 with .NET Framework 4.8 and [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases/latest), run the setup from [Releases](https://github.com/JLiveOf/Generic-Wupstream-Program/releases) or extract the portable ZIP. Open **Generic Wupstream Program**, select your display, enter the GamePad IP, and click **Connect by IP**. Leave the address blank and click **Find GamePad** for UDP discovery.
 
 The bilingual setup installs the app for the current user, creates a Start menu shortcut, and registers an uninstaller. Get ViGEmBus separately. Close the app before upgrading.
@@ -19,6 +19,8 @@ If the link drops, the app releases the controls, pauses video, and tries to rec
 ## Controls and media
 
 - **Stream screen** captures the selected monitor and preserves its aspect ratio on the 854 × 480 GamePad screen. Windowed and borderless games generally work with desktop capture. The Windows secure desktop, protected video, and some exclusive fullscreen games may appear black.
+- Choose **FPS** (15–60 captured frames per second) and **Quality** before connecting. The sender repeats frames to match the GamePad display. The Low, Medium and High bitrate ceilings are 1.8, 3.2 and 5.5 Mbps.
+- Uncheck **Stream screen** to show **Game Controller Mode** on the pad without capturing the desktop.
 - **Stream PC audio** copies the sound from the default Windows playback device. You can still hear the audio on the PC. Use the GamePad volume slider to control its speakers or headphones.
 - **Use touch as mouse** turns taps and drags on the streamed display into left mouse clicks and drags. It starts disabled and can be toggled during the session.
 - **Test vibration** activates the motor for one third of a second. Games can also use the virtual controller's vibration. Use **Brightness** to adjust the screen during the session.
@@ -27,6 +29,10 @@ If the link drops, the app releases the controls, pauses video, and tries to rec
 - **Test in Windows** opens the game controller control panel. Leave the sticks centered when you connect. A, B, X, and Y match the printed GamePad letters by default. Toggle **Xbox ABXY positions** to swap A/B and X/Y and match the physical positions of an Xbox controller. You can change it while connected. **+** maps to Start, **−** to Back, and **HOME** to Guide. Accelerometer and gyroscope values appear in the app as diagnostics.
 
 The camera, NFC/Amiibo, and infrared need additional support in the GamePad software. WUP Stream does not transmit these peripherals. The local UDP connection is unencrypted.
+
+## Linux
+
+The [Linux package guide](host/linux/README.md) covers X11 and Wayland software video.
 
 ## Build
 
