@@ -6,7 +6,7 @@ printf '%s\n' 'deb http://deb.debian.org/debian bullseye main' > /tmp/wup-debian
 apt_args=(-o Dir::Etc::sourcelist=/tmp/wup-debian.list -o Dir::Etc::sourceparts=-)
 apt-get "${apt_args[@]}" update -qq
 apt-get "${apt_args[@]}" install -qy --no-install-recommends \
-  ca-certificates curl python3-gi python3-gi-cairo python3-evdev gir1.2-gtk-3.0 \
+  ca-certificates curl file python3-gi python3-gi-cairo python3-evdev gir1.2-gtk-3.0 \
   gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
   gstreamer1.0-x gstreamer1.0-pipewire xvfb xauth xdotool squashfs-tools \
   desktop-file-utils adwaita-icon-theme fonts-dejavu-core librsvg2-common
