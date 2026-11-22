@@ -1,6 +1,7 @@
 import os
 import select
 import unittest
+from contextlib import closing
 from unittest.mock import patch
 
 from evdev import InputDevice, ecodes as e
@@ -35,7 +36,7 @@ class MappingTest(unittest.TestCase):
     def test_kernel_device(self):
         controller = Gamepad(xbox_positions=True)
         try:
-            with InputDevice(controller.device.device.path) as reader:
+            with closing(InputDevice(controller.device.device.path)) as reader:
                 controller.report(PadInput(buttons=0x4000, lx=1100))
                 self.assertTrue(select.select([reader.fd], [], [], 2)[0])
                 events = {(event.type, event.code, event.value) for event in reader.read()}
