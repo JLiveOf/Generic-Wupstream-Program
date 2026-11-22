@@ -34,7 +34,7 @@ The camera, NFC/Amiibo, and infrared need additional support in the GamePad soft
 
 ## Linux
 
-The [Linux package guide](host/linux/README.md) covers X11 and Wayland software video.
+The [Linux package guide](host/linux/README.en.md) covers desktop capture on X11 and Wayland. [Guía en español](host/linux/README.md)
 
 ## Build
 

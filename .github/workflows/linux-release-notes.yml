@@ -1,0 +1,17 @@
+name: Update Linux release notes
+on:
+  push:
+    branches: [main]
+    paths:
+      - host/linux/RELEASE-2.2.1.md
+  workflow_dispatch:
+jobs:
+  update-notes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit v2.2.1-linux.1 --notes-file host/linux/RELEASE-2.2.1.md

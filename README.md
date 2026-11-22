@@ -34,7 +34,7 @@ La cámara, el NFC/Amiibo y el infrarrojo requieren soporte adicional en el soft
 
 ## Linux
 
-La [guía del paquete Linux](host/linux/README.md) cubre la captura en X11 y Wayland.
+La [guía de Linux en español](host/linux/README.md) cubre la captura en X11 y Wayland. [English guide](host/linux/README.en.md)
 
 ## Compilar y licencias
 

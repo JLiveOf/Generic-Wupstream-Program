@@ -1,5 +1,7 @@
 # Generic Wupstream Program para Linux
 
+[English guide](README.en.md)
+
 Instala el paquete x86-64 con `sudo apt install ./generic-wupstream_2.2.1+experimental.1_amd64.deb`.
 Abre **Generic Wupstream Program** desde el lanzador o ejecuta `generic-wupstream`.
 

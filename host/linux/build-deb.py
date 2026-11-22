@@ -32,7 +32,8 @@ def build(output, engine):
         ("usr/bin/generic-wupstream", (HERE / "generic-wupstream").read_bytes(), 0o755),
         ("usr/share/applications/generic-wupstream.desktop", (HERE / "generic-wupstream.desktop").read_bytes(), 0o644),
         ("usr/share/icons/hicolor/256x256/apps/generic-wupstream.png", (HERE.parent / "assets/app.png").read_bytes(), 0o644),
-        ("usr/share/doc/generic-wupstream/README", (HERE / "README.md").read_bytes(), 0o644),
+        ("usr/share/doc/generic-wupstream/README.md", (HERE / "README.md").read_bytes(), 0o644),
+        ("usr/share/doc/generic-wupstream/README.en.md", (HERE / "README.en.md").read_bytes(), 0o644),
         ("usr/share/doc/generic-wupstream/copyright", (HERE.parent.parent / "LICENSE").read_bytes(), 0o644),
         ("usr/lib/generic-wupstream/libwupstream.so", binary, 0o644),
     ]
