@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+: "${APPDIR:=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
+export APPDIR
+export WUP_HOST_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
+export WUP_HOST_XDG_DATA_DIRS="${XDG_DATA_DIRS-}"
+libs="$APPDIR/usr/lib/x86_64-linux-gnu"
+export LD_LIBRARY_PATH="$libs:$APPDIR/lib/x86_64-linux-gnu"
+export PYTHONHOME="$APPDIR/usr"
+export PYTHONPATH="$APPDIR/usr/lib/python3/dist-packages"
+export PYTHONDONTWRITEBYTECODE=1
+export GI_TYPELIB_PATH="$libs/girepository-1.0"
+export GST_PLUGIN_PATH_1_0=
+export GST_PLUGIN_SYSTEM_PATH_1_0="$libs/gstreamer-1.0"
+export GST_PLUGIN_SCANNER="$libs/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
+export XDG_DATA_DIRS="$APPDIR/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export GSETTINGS_SCHEMA_DIR="$APPDIR/usr/share/glib-2.0/schemas"
+cache=$(mktemp)
+escaped=$(printf '%s' "$APPDIR" | sed 's/[\&|]/\\&/g')
+sed "s|@APPDIR@|$escaped|g" "$APPDIR/pixbuf-loaders.cache.in" > "$cache"
+exec 3<"$cache"
+rm -f -- "$cache"
+export GDK_PIXBUF_MODULE_FILE=/proc/self/fd/3
+export SPA_PLUGIN_DIR="$libs/spa-0.2"
+export PIPEWIRE_MODULE_DIR="$libs/pipewire-0.3"
+if [ -d "$APPDIR/usr/share/pipewire" ]; then
+    export PIPEWIRE_CONFIG_DIR="$APPDIR/usr/share/pipewire"
+fi
+exec "$APPDIR/usr/bin/python3.9" "$APPDIR/usr/bin/generic-wupstream" "$@"

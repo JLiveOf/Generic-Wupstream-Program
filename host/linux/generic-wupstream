@@ -2,7 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import ctypes
 import ipaddress
+import locale
+import time
 import os
+import subprocess
 import sys
 import threading
 import uuid
@@ -11,23 +14,28 @@ from collections import deque
 from urllib.parse import urlencode
 
 import gi
+gi.require_foreign("cairo")
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 gi.require_version("Gst", "1.0")
-from gi.repository import Gio, GLib, Gst, Gtk
+from gi.repository import Gdk, Gio, GLib, Gst, Gtk
 
-sys.path.insert(0, "/usr/lib/generic-wupstream")
+APP_LIB = os.path.join(os.environ.get("APPDIR", "/"), "usr/lib/generic-wupstream")
+sys.path.insert(0, APP_LIB)
 from evdev.uinput import UInputError
 from wup_gamepad import Gamepad, PadInput
+from wup_ui import CSS, PadView, translate
 
 PORTAL = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
 SCREENCAST = "org.freedesktop.portal.ScreenCast"
 ISSUES = "https://github.com/JLiveOf/Generic-Wupstream-Program/issues/new"
-VERSION = "2.2.2+experimental.3"
+VERSION = "2.2.3+experimental.1"
 
 
 class ScreenCast:
-    def __init__(self):
+    def __init__(self, tr):
+        self.tr = tr
         self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         self.session = None
         self.fd = None
@@ -54,15 +62,15 @@ class ScreenCast:
                                         GLib.Variant(signature, (*arguments, options)), None,
                                         Gio.DBusCallFlags.NONE, 5000, None).unpack()[0]
             if handle != path:
-                raise RuntimeError("El portal devolvió una ruta de solicitud inesperada.")
+                raise RuntimeError(self.tr("El portal devolvió una ruta de solicitud inesperada."))
             if not response:
                 loop.run()
             if not response:
                 self.bus.call(PORTAL, path, "org.freedesktop.portal.Request", "Close",
                               None, None, Gio.DBusCallFlags.NONE, 1000, None, None)
-                raise RuntimeError("El portal de captura no respondió.")
+                raise RuntimeError(self.tr("El portal de captura no respondió."))
             if response[0] != 0:
-                raise RuntimeError("Se canceló la captura de pantalla.")
+                raise RuntimeError(self.tr("Se canceló la captura de pantalla."))
             return response[1]
         finally:
             deadline.destroy()
@@ -100,7 +108,7 @@ WIDTH, HEIGHT = 854, 480
 
 
 def native_library():
-    lib = ctypes.CDLL("/usr/lib/generic-wupstream/libwupstream.so")
+    lib = ctypes.CDLL(os.path.join(APP_LIB, "libwupstream.so"))
     lib.wupstream_open_settings.argtypes = [ctypes.c_char_p, ctypes.c_int, CANCEL, ctypes.c_void_p,
                                             ctypes.c_int, ctypes.c_int]
     lib.wupstream_open_settings.restype = ctypes.c_void_p
@@ -117,42 +125,144 @@ def native_library():
     return lib
 
 
+def open_issue_url(url):
+    if not os.environ.get("APPIMAGE"):
+        return webbrowser.open(url)
+    env = os.environ.copy()
+    for name in ("PYTHONHOME", "PYTHONPATH", "GI_TYPELIB_PATH", "GSETTINGS_SCHEMA_DIR",
+                 "GDK_PIXBUF_MODULE_FILE", "GST_PLUGIN_SYSTEM_PATH_1_0", "GST_PLUGIN_PATH_1_0",
+                 "GST_PLUGIN_SCANNER", "SPA_PLUGIN_DIR", "PIPEWIRE_MODULE_DIR", "PIPEWIRE_CONFIG_DIR"):
+        env.pop(name, None)
+    for name in ("LD_LIBRARY_PATH", "XDG_DATA_DIRS"):
+        value = env.pop("WUP_HOST_" + name, "")
+        if value:
+            env[name] = value
+        else:
+            env.pop(name, None)
+    subprocess.Popen(["xdg-open", url], env=env)
+    return True
+
+
 class Window(Gtk.Window):
     def __init__(self):
         super().__init__(title="Generic Wupstream Program")
-        self.set_border_width(18)
-        self.set_default_size(440, 300)
+        self.set_default_size(704, 582)
+        self.set_resizable(False)
+        self.set_position(Gtk.WindowPosition.CENTER)
         self.set_icon_name("generic-wupstream")
+        self.get_style_context().add_class("wup")
+        Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", True)
+        css = Gtk.CssProvider()
+        css.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        self.english = not (locale.getlocale()[0] or "en").lower().startswith("es")
         self.pipeline = self.portal = self.worker = None
         self.cancel = threading.Event()
         self.logs = deque([f"Versión: {VERSION}"], maxlen=24)
-        self.closing = False
-        self.pending = False
-        grid = Gtk.Grid(column_spacing=12, row_spacing=10)
-        self.add(grid)
-        self.address = Gtk.Entry(placeholder_text="192.168.1.42", hexpand=True)
-        self.fps = self.combo(["15", "24", "30", "45", "60"], 2)
-        self.quality = self.combo(["Baja", "Media", "Alta"], 1)
-        self.backend = self.combo(["Automática", "X11", "Wayland (PipeWire)"], 0)
-        self.video = Gtk.CheckButton(label="Enviar pantalla", active=True)
-        self.video.connect("toggled", self.update_controls)
-        self.xbox = Gtk.CheckButton(label="ABXY por posición Xbox", active=True)
-        self.button = Gtk.Button(label="Conectar")
+        self.closing = self.pending = False
+        self.labels = []
+        self.layout = Gtk.Fixed()
+        self.add(self.layout)
+
+        title = Gtk.Label(label="Wii U GamePad", xalign=0)
+        title.get_style_context().add_class("title")
+        self.place(title, 30, 14, 475, 48)
+        self.language = self.combo(["Español", "English"], int(self.english))
+        self.language.get_accessible().set_name("Idioma / Language")
+        self.place(self.language, 523, 28, 155, 28)
+        self.label("Abre WUP Stream en el GamePad y conéctalo a la misma red que el PC.", 30, 68, 648, 26, "muted")
+        self.label("IP del GamePad (opcional)", 30, 110, 648, 29)
+        self.address = Gtk.Entry(max_length=15)
+        self.address.connect("changed", lambda *_: self.refresh_button())
+        self.address.connect("activate", lambda *_: self.toggle() if self.button.get_sensitive() else None)
+        self.place(self.address, 26, 144, 436, 31)
+        self.button = Gtk.Button()
+        self.button.get_style_context().add_class("primary")
         self.button.connect("clicked", self.toggle)
-        report = Gtk.Button(label="Reportar un problema en GitHub")
-        report.connect("clicked", self.report_issue)
-        self.status = Gtk.Label(label="Abre el WUP Stream oficial en el GamePad.", xalign=0, wrap=True)
-        for row, (label, widget) in enumerate((("IP del GamePad", self.address), ("Captura", self.backend),
-                                               ("FPS", self.fps), ("Calidad", self.quality))):
-            grid.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
-            grid.attach(widget, 1, row, 1, 1)
-        grid.attach(self.video, 1, 4, 1, 1)
-        grid.attach(self.xbox, 1, 5, 1, 1)
-        grid.attach(self.button, 1, 6, 1, 1)
-        grid.attach(self.status, 0, 7, 2, 1)
-        grid.attach(report, 0, 8, 2, 1)
+        self.place(self.button, 476, 140, 202, 38)
+        self.status = Gtk.Label(xalign=0, wrap=True)
+        self.status.get_style_context().add_class("muted")
+        self.place(self.status, 30, 185, 648, 35)
+
+        self.label("Captura", 30, 222, 70, 27)
+        self.backend = self.combo(["", "X11", "Wayland (PipeWire)"], 0)
+        self.place(self.backend, 101, 221, 186, 27)
+        self.video = Gtk.CheckButton(active=True)
+        self.video.connect("toggled", self.update_controls)
+        self.place(self.video, 476, 220, 202, 29)
+        self.label("FPS", 30, 255, 70, 27)
+        self.fps = self.combo(["15", "24", "30", "45", "60"], 2)
+        self.place(self.fps, 101, 254, 95, 27)
+        self.label("Calidad", 225, 255, 74, 27)
+        self.quality = self.combo(["", "", ""], 1)
+        self.place(self.quality, 299, 254, 163, 27)
+
+        self.label("Controles en directo", 30, 294, 360, 29, "section")
+        self.battery = Gtk.Label(xalign=1)
+        self.battery.get_style_context().add_class("muted")
+        self.place(self.battery, 457, 294, 221, 29)
+        self.preview = PadView(self.tr)
+        self.place(self.preview, 26, 329, 652, 196)
+        self.xbox = Gtk.CheckButton(active=True)
+        self.place(self.xbox, 26, 536, 218, 34)
+        self.report = Gtk.Button()
+        self.report.connect("clicked", self.report_issue)
+        self.place(self.report, 427, 536, 251, 34)
+        self.language.connect("changed", self.change_language)
+        self.apply_language()
         self.connect("delete-event", self.on_close)
         self.connect("destroy", lambda *_: Gtk.main_quit())
+
+    def tr(self, message, **values):
+        return translate(message, self.english, **values)
+
+    def place(self, widget, x, y, width, height):
+        widget.set_size_request(width, height)
+        self.layout.put(widget, x, y)
+
+    def label(self, caption, x, y, width, height, style=None):
+        widget = Gtk.Label(xalign=0)
+        if style:
+            widget.get_style_context().add_class(style)
+        self.labels.append((widget, caption))
+        self.place(widget, x, y, width, height)
+
+    def change_language(self, selector):
+        self.english = selector.get_active() == 1
+        self.apply_language()
+
+    def refresh_button(self):
+        if not self.worker and not self.pending:
+            self.button.set_label(self.tr("Conectar por IP" if self.address.get_text().strip() else "Buscar GamePad"))
+
+    def apply_language(self):
+        for widget, caption in self.labels:
+            widget.set_text(self.tr(caption))
+        for widget, caption in ((self.video, "Enviar pantalla"), (self.xbox, "ABXY por posición Xbox"),
+                                (self.report, "Reportar un problema en GitHub")):
+            widget.set_label(self.tr(caption))
+        for combo, options in ((self.backend, ("Automática", "X11", "Wayland (PipeWire)")),
+                               (self.quality, ("Baja", "Media", "Alta"))):
+            previous = combo.get_active()
+            combo.remove_all()
+            for option in options:
+                combo.append_text(self.tr(option))
+            combo.set_active(previous)
+        self.address.get_accessible().set_name(self.tr("IP del GamePad (opcional)"))
+        self.backend.get_accessible().set_name(self.tr("Captura"))
+        self.fps.get_accessible().set_name("FPS")
+        self.quality.get_accessible().set_name(self.tr("Calidad"))
+        self.status.set_text(self.tr("Introduce la IP de WUP Stream o deja el campo vacío para buscarlo."))
+        self.show_state(None, -1, False)
+        self.refresh_button()
+
+    def show_state(self, state, battery, charging):
+        self.preview.state = state
+        self.preview.queue_draw()
+        label = self.tr("Batería · —") if battery < 0 else self.tr("Batería · {level} %", level=battery)
+        self.battery.set_text(label + (self.tr(" · Cargando") if battery >= 0 and charging else ""))
+        return False
 
     @staticmethod
     def combo(labels, selected):
@@ -164,7 +274,7 @@ class Window(Gtk.Window):
 
     def update_controls(self, *_):
         idle = not self.pending and self.worker is None
-        for control in (self.address, self.video, self.xbox):
+        for control in (self.address, self.video, self.xbox, self.language):
             control.set_sensitive(idle)
         for control in (self.backend, self.fps, self.quality):
             control.set_sensitive(idle and self.video.get_active())
@@ -181,33 +291,40 @@ class Window(Gtk.Window):
     def report_issue(self, *_):
         details = "\n".join(self.logs.copy())
         dialog = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.INFO,
-                                   text="Revisa el diagnóstico antes de abrir el issue")
+                                   text=self.tr("Revisa el diagnóstico antes de abrir el issue"))
         dialog.format_secondary_text(details)
-        dialog.add_button("Cancelar", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Abrir GitHub", Gtk.ResponseType.OK)
+        dialog.add_button(self.tr("Cancelar"), Gtk.ResponseType.CANCEL)
+        dialog.add_button(self.tr("Abrir GitHub"), Gtk.ResponseType.OK)
         accepted = dialog.run() == Gtk.ResponseType.OK
         dialog.destroy()
         if accepted:
-            body = ("## Qué ocurrió\n\n\n## Cómo reproducirlo\n\n\n"
-                    "## Diagnóstico de Generic Wupstream\n\n```text\n" + details + "\n```\n")
+            body = "\n\n".join("## " + self.tr(section) for section in
+                                ("Qué ocurrió", "Cómo reproducirlo", "Diagnóstico de Generic Wupstream"))
+            body += "\n\n```text\n" + details + "\n```\n"
             try:
-                opened = webbrowser.open(ISSUES + "?" + urlencode({"title": "[Linux] ", "body": body}))
-            except webbrowser.Error:
+                opened = open_issue_url(ISSUES + "?" + urlencode({"title": "[Linux] ", "body": body}))
+            except (OSError, webbrowser.Error):
                 opened = False
             if not opened:
-                self.status.set_text("No se pudo abrir el navegador.")
+                self.status.set_text(self.tr("No se pudo abrir el navegador."))
 
     def toggle(self, *_):
         if self.worker:
             self.cancel.set()
             self.button.set_sensitive(False)
+            self.status.set_text(self.tr("Desconectando…"))
             return
         self.pending = True
         self.update_controls()
         self.button.set_sensitive(False)
         stage = "dirección"
         try:
-            address = str(ipaddress.IPv4Address(self.address.get_text().strip()))
+            address = self.address.get_text().strip()
+            if address:
+                try:
+                    address = str(ipaddress.IPv4Address(address))
+                except ValueError as error:
+                    raise ValueError(self.tr("Escribe la dirección IPv4 que aparece en WUP Stream.")) from error
             bitrate = [1800, 3200, 5500][self.quality.get_active()]
             if self.video.get_active():
                 selected = self.backend.get_active()
@@ -217,7 +334,7 @@ class Window(Gtk.Window):
                                  f"FPS: {self.fps.get_active_text()} · Calidad: {self.quality.get_active_text()}")
                 stage = "portal" if wayland else "captura X11"
                 if wayland:
-                    self.portal = ScreenCast()
+                    self.portal = ScreenCast(self.tr)
                     source = self.portal.open()
                 else:
                     source = "ximagesrc use-damage=false show-pointer=true"
@@ -230,10 +347,10 @@ class Window(Gtk.Window):
             else:
                 self.logs.append("Modo mando sin captura")
             self.cancel.clear()
-            self.status.set_text("Esperando al WUP Stream oficial…")
+            self.status.set_text(self.tr("Esperando al WUP Stream oficial…"))
             self.worker = threading.Thread(target=self.stream, args=(address, bitrate, self.xbox.get_active()))
             self.worker.start()
-            self.button.set_label("Desconectar")
+            self.button.set_label(self.tr("Desconectar"))
         except (OSError, ValueError, RuntimeError, GLib.Error, KeyError, IndexError) as error:
             self.logs.append(f"Error en {stage}: {type(error).__name__}")
             self.finish(str(error))
@@ -245,23 +362,23 @@ class Window(Gtk.Window):
     def capture_video(self, lib, pad, errors):
         try:
             if self.pipeline.set_state(Gst.State.PLAYING) == Gst.StateChangeReturn.FAILURE:
-                raise RuntimeError("No se pudo iniciar la captura.")
+                raise RuntimeError(self.tr("No se pudo iniciar la captura."))
             sink = self.pipeline.get_by_name("out")
             bus = self.pipeline.get_bus()
             while not self.cancel.is_set():
                 message = bus.pop_filtered(Gst.MessageType.ERROR | Gst.MessageType.EOS)
                 if message:
                     raise RuntimeError(message.parse_error()[0].message if message.type == Gst.MessageType.ERROR
-                                       else "Terminó la captura de pantalla.")
+                                       else self.tr("Terminó la captura de pantalla."))
                 sample = sink.emit("try-pull-sample", 50 * Gst.MSECOND)
                 if sample:
                     buffer = sample.get_buffer()
                     if buffer.get_size() != WIDTH * HEIGHT * 4:
-                        raise RuntimeError("La captura devolvió un formato de imagen inesperado.")
+                        raise RuntimeError(self.tr("La captura devolvió un formato de imagen inesperado."))
                     data = buffer.extract_dup(0, buffer.get_size())
                     if lib.wupstream_frame(pad, data, WIDTH * 4, 1):
                         if not self.cancel.is_set():
-                            raise RuntimeError("Se perdió la conexión con el GamePad.")
+                            raise RuntimeError(self.tr("Se perdió la conexión con el GamePad."))
                         break
         except (OSError, RuntimeError, GLib.Error) as error:
             errors.append(error)
@@ -269,27 +386,31 @@ class Window(Gtk.Window):
     def stream(self, address, bitrate, xbox_positions):
         pad = controller = video = None
         video_errors = []
-        result = "Desconectado"
+        result = self.tr("Desconectado")
         stage = "mando virtual"
         try:
             try:
                 controller = Gamepad(xbox_positions)
+                self.logs.append("Mando virtual creado")
             except (OSError, UInputError) as error:
-                raise RuntimeError("No se pudo crear el mando virtual en /dev/uinput. "
-                                   "Reinicia Linux después de instalar el paquete y usa una sesión local.") from error
-            self.logs.append("Mando virtual creado")
+                self.logs.append("Mando virtual no disponible")
+                if not self.pipeline:
+                    raise RuntimeError(self.tr("No se pudo crear el mando virtual en /dev/uinput. Comprueba el acceso desde tu sesión de Linux.")) from error
             stage = "motor nativo"
             lib = native_library()
             stage = "conexión al receptor oficial"
             expired = CANCEL(lambda _: int(self.cancel.is_set()))
-            pad = lib.wupstream_open_settings(address.encode(), 9000, expired, None, 0, bitrate)
+            pad = lib.wupstream_open_settings(address.encode() if address else None, 9000, expired, None, 0, bitrate)
             if not pad:
                 if not self.cancel.is_set():
-                    result = "No se pudo conectar. Abre el WUP Stream oficial y verifica su IP."
+                    result = self.tr("No se pudo conectar. Abre el WUP Stream oficial y verifica su IP.")
                     self.logs.append("El receptor oficial no respondió o no se pudo inicializar el motor.")
                 return
             self.logs.append("Conexión establecida")
-            connected = "Conectado · Mando virtual" + (" y vídeo" if self.pipeline else "")
+            if not controller:
+                connected = self.tr("Conectado · Vídeo (sin mando virtual)")
+            else:
+                connected = self.tr("Conectado · Mando virtual y vídeo" if self.pipeline else "Conectado · Mando virtual")
             GLib.idle_add(self.status.set_text, connected)
             if self.pipeline:
                 video = threading.Thread(target=self.capture_video, args=(lib, pad, video_errors))
@@ -297,21 +418,31 @@ class Window(Gtk.Window):
             age, kbps, retries = ctypes.c_int(), ctypes.c_int(), ctypes.c_int()
             state, neutral = PadInput(), PadInput()
             recovering = False
+            next_update = 0
             stage = "lectura del GamePad"
             while not self.cancel.is_set():
                 if video_errors:
                     self.logs.append("Se detuvo la captura GStreamer; el mando sigue conectado")
-                    GLib.idle_add(self.status.set_text, f"Mando conectado · Error de vídeo: {video_errors.pop()}")
-                    connected = "Conectado · Mando virtual"
+                    error = video_errors.pop()
+                    if not controller:
+                        raise RuntimeError(self.tr("Error de vídeo: {error}", error=error))
+                    GLib.idle_add(self.status.set_text, self.tr("Mando conectado · Error de vídeo: {error}", error=error))
+                    connected = self.tr("Conectado · Mando virtual")
                 received = lib.wupstream_input(pad, ctypes.byref(state))
                 link = lib.wupstream_link(pad, ctypes.byref(age), ctypes.byref(kbps), ctypes.byref(retries))
                 if received < 0 or link < 0:
                     self.logs.append(f"Enlace perdido · Sin respuesta: {age.value} ms")
-                    raise RuntimeError("Se perdió la conexión con el GamePad.")
-                controller.report(neutral if link else state)
+                    raise RuntimeError(self.tr("Se perdió la conexión con el GamePad."))
+                if controller:
+                    controller.report(neutral if link else state)
+                now = time.monotonic()
+                if now >= next_update:
+                    preview = None if link else (state.buttons, state.lx, state.ly, state.rx, state.ry)
+                    GLib.idle_add(self.show_state, preview, -1 if link else state.battery, not link and state.charging)
+                    next_update = now + 0.045
                 if bool(link) != recovering:
                     recovering = bool(link)
-                    GLib.idle_add(self.status.set_text, "Reconectando · Mando en reposo" if recovering else connected)
+                    GLib.idle_add(self.status.set_text, self.tr("Reconectando · Mando en reposo") if recovering else connected)
                 self.cancel.wait(0.004)
         except (OSError, RuntimeError, GLib.Error) as error:
             self.logs.append(f"Error en {stage}: {type(error).__name__}")
@@ -340,10 +471,11 @@ class Window(Gtk.Window):
         if self.portal:
             self.portal.close()
             self.portal = None
-        self.button.set_label("Conectar")
+        self.refresh_button()
         self.button.set_sensitive(True)
         self.update_controls()
         self.status.set_text(message)
+        self.show_state(None, -1, False)
         if self.closing:
             self.destroy()
 
