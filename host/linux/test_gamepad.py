@@ -32,6 +32,17 @@ class MappingTest(unittest.TestCase):
         controller.report(PadInput(buttons=0x8000))
         uinput.return_value.write.assert_called_once_with(e.EV_KEY, e.BTN_SOUTH, 1)
 
+    @patch("wup_gamepad.UInput")
+    def test_layout_change_releases_previous_button(self, uinput):
+        controller = Gamepad(xbox_positions=False)
+        held = PadInput(buttons=0x8000)
+        controller.report(held)
+        controller.set_xbox_positions(True)
+        controller.report(held)
+        uinput.return_value.write.assert_any_call(e.EV_KEY, e.BTN_SOUTH, 0)
+        uinput.return_value.write.assert_any_call(e.EV_KEY, e.BTN_EAST, 1)
+        uinput.assert_called_once()
+
     @unittest.skipUnless(os.access("/dev/uinput", os.W_OK), "kernel uinput unavailable")
     def test_kernel_device(self):
         controller = Gamepad(xbox_positions=True)

@@ -4,6 +4,39 @@ from math import hypot, tau
 from gi.repository import Gtk
 
 ENGLISH = {
+    "Probar mando virtual": "Test virtual controller",
+    "El mando virtual se ha desconectado.": "The virtual controller has disconnected.",
+    "Cerrar": "Close",
+    "Enviar audio del PC": "Send PC audio",
+    "Usar micrófono": "Use microphone",
+    "Crear micrófono virtual": "Create virtual microphone",
+    "Grabar WAV…": "Record WAV…",
+    "Quitar grabación WAV": "Remove WAV recording",
+    "Guardar el micrófono del GamePad": "Save GamePad microphone",
+    "Guardar": "Save",
+    "Táctil como ratón": "Touchscreen as mouse",
+    "Monitor": "Monitor",
+    "Escritorio completo": "Entire desktop",
+    "Elegir en el portal": "Choose in portal",
+    "El portal no concedió acceso al puntero.": "The portal did not grant pointer access.",
+    "El portal no informó del tamaño del monitor.": "The portal did not report the monitor size.",
+    "Audio del PC no disponible: {error}": "PC audio unavailable: {error}",
+    "Micrófono virtual no disponible: {error}": "Virtual microphone unavailable: {error}",
+    "No se pudo abrir el WAV: {error}": "Could not open the WAV file: {error}",
+    "Se perdió la salida de audio del PC.": "PC audio capture was lost.",
+    "Se perdió la salida del micrófono virtual.": "Virtual microphone output was lost.",
+    "Se interrumpió la grabación WAV: {error}": "WAV recording stopped: {error}",
+    "No se pudo cerrar el WAV: {error}": "Could not close the WAV file: {error}",
+    "No se pudo quitar el micrófono virtual: {error}": "Could not remove the virtual microphone: {error}",
+    "Modo mando": "Game Controller Mode",
+    "Brillo": "Brightness",
+    "Del GamePad": "GamePad default",
+    "Probar vibración": "Test vibration",
+    "Instalar Homebrew Menu": "Install Homebrew Menu",
+    "Volumen del GamePad · {value}": "GamePad volume · {value}",
+    "Acelerómetro · {accel}     Giroscopio · {gyro}": "Accelerometer · {accel}     Gyroscope · {gyro}",
+    "En una sesión Wayland, elige la captura Wayland (PipeWire).": "In a Wayland session, choose Wayland (PipeWire) capture.",
+    "Instala GStreamer y el complemento PipeWire del sistema para capturar en Wayland.": "Install your system's GStreamer tools and PipeWire plugin to capture on Wayland.",
     "Abre WUP Stream en el GamePad y conéctalo a la misma red que el PC.": "Open WUP Stream on the GamePad and connect it to the same network as the PC.",
     "IP del GamePad (opcional)": "GamePad IP (optional)",
     "Introduce la IP de WUP Stream o deja el campo vacío para buscarlo.": "Enter the IP shown in WUP Stream or leave it blank to search.",
@@ -26,11 +59,13 @@ ENGLISH = {
     "No se pudo conectar. Abre el WUP Stream oficial y verifica su IP.": "Could not connect. Open the official WUP Stream receiver and check its IP.",
     "No se pudo iniciar la captura.": "Could not start screen capture.",
     "Terminó la captura de pantalla.": "Screen capture ended.",
+    "La captura no recibió imágenes durante 10 segundos.": "Screen capture received no frames for 10 seconds.",
     "La captura devolvió un formato de imagen inesperado.": "Screen capture returned an unexpected image format.",
     "Se perdió la conexión con el GamePad.": "Lost the connection to the GamePad.",
     "El portal devolvió una ruta de solicitud inesperada.": "The screen capture portal returned an unexpected request path.",
     "El portal de captura no respondió.": "The screen capture portal did not respond.",
     "Se canceló la captura de pantalla.": "Screen capture was canceled.",
+    "El portal no pudo iniciar la captura ({method}).": "The portal could not start screen capture ({method}).",
     "No se pudo crear el mando virtual en /dev/uinput. Comprueba el acceso desde tu sesión de Linux.": "Could not create the virtual controller in /dev/uinput. Check access from your Linux session.",
     "Conectado · Mando virtual": "Connected · Virtual controller",
     "Conectado · Mando virtual y vídeo": "Connected · Virtual controller and video",
@@ -125,5 +160,19 @@ class PadView(Gtk.DrawingArea):
             cr.fill_preserve()
             self.color(cr, self.EDGE)
             cr.stroke()
-            self.caption(cr, name, x + 27, y + 22, self.DARK if held else self.MUTED)
+            color = self.DARK if held else self.MUTED
+            if 8 <= i <= 11:
+                self.color(cr, color)
+                cr.save()
+                cr.translate(x + 27, y + 22)
+                cr.rotate((0, tau / 2, -tau / 4, tau / 4)[i - 8])
+                cr.move_to(0, 5)
+                cr.line_to(0, -5)
+                cr.move_to(-4, -1)
+                cr.line_to(0, -5)
+                cr.line_to(4, -1)
+                cr.stroke()
+                cr.restore()
+            else:
+                self.caption(cr, name, x + 27, y + 22, color)
         return False

@@ -12,7 +12,7 @@ HERE = Path(__file__).resolve().parent
 LIB = Path("/usr/lib/x86_64-linux-gnu")
 PLUGINS = LIB / "gstreamer-1.0"
 SYSTEM_LIBS = re.compile(r"^(?:ld-linux|lib(?:c|m|pthread|dl|rt|resolv|util|anl|nsl|GL|EGL|drm|gbm)\.so)")
-VIDEO_PLUGINS = ("coreelements", "app", "videoconvert", "videorate", "videoscale", "ximagesrc", "pipewire")
+VIDEO_PLUGINS = ("coreelements", "app", "videoconvert", "videorate", "videoscale", "ximagesrc")
 
 
 def bundle(package, appimagetool, output):
@@ -35,8 +35,7 @@ def bundle(package, appimagetool, output):
     copy(Path("/usr/bin/python3.9"))
     for directory in (Path("/usr/lib/python3.9"), Path("/usr/lib/python3/dist-packages/gi"),
                       Path("/usr/lib/python3/dist-packages/evdev"), Path("/usr/lib/python3/dist-packages/cairo"),
-                      LIB / "girepository-1.0", LIB / "spa-0.2", LIB / "pipewire-0.3",
-                      Path("/usr/share/pipewire"), Path("/usr/share/glib-2.0/schemas"),
+                      LIB / "girepository-1.0", Path("/usr/share/glib-2.0/schemas"),
                       Path("/usr/share/icons/Adwaita"), Path("/usr/share/icons/hicolor"),
                       Path("/usr/share/mime")):
         tree(directory)
@@ -58,7 +57,7 @@ def bundle(package, appimagetool, output):
     # Typelibs load GTK/GStreamer libraries with dlopen, which ldd cannot infer
     # from the Python executable alone.
     for name in ("libgtk-3.so.0", "libgdk-3.so.0", "libgstvideo-1.0.so.0",
-                 "libgstreamer-1.0.so.0", "libgdk_pixbuf-2.0.so.0"):
+                 "libgstreamer-1.0.so.0", "libgdk_pixbuf-2.0.so.0", "libXtst.so.6"):
         copy(LIB / name)
     inspected = set()
     while True:

@@ -24,9 +24,4 @@ sed "s|@APPDIR@|$escaped|g" "$APPDIR/pixbuf-loaders.cache.in" > "$cache"
 exec 3<"$cache"
 rm -f -- "$cache"
 export GDK_PIXBUF_MODULE_FILE=/proc/self/fd/3
-export SPA_PLUGIN_DIR="$libs/spa-0.2"
-export PIPEWIRE_MODULE_DIR="$libs/pipewire-0.3"
-if [ -d "$APPDIR/usr/share/pipewire" ]; then
-    export PIPEWIRE_CONFIG_DIR="$APPDIR/usr/share/pipewire"
-fi
 exec "$APPDIR/usr/bin/python3.9" "$APPDIR/usr/bin/generic-wupstream" "$@"

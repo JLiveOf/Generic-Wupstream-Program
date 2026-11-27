@@ -40,6 +40,7 @@ def build(output, engine):
     data = [
         ("usr/bin/generic-wupstream", (HERE / "generic-wupstream").read_bytes().replace(b"\r\n", b"\n"), 0o755),
         ("usr/lib/generic-wupstream/wup_gamepad.py", (HERE / "wup_gamepad.py").read_bytes(), 0o644),
+        ("usr/lib/generic-wupstream/wup_audio.py", (HERE / "wup_audio.py").read_bytes(), 0o644),
         ("usr/lib/generic-wupstream/wup_ui.py", (HERE / "wup_ui.py").read_bytes(), 0o644),
         ("usr/lib/udev/rules.d/70-generic-wupstream-uinput.rules",
          (HERE / "70-generic-wupstream-uinput.rules").read_bytes(), 0o644),
@@ -53,12 +54,13 @@ def build(output, engine):
     ]
     installed = sum(len(content) for _, content, _ in data)
     control = (
-        "Package: generic-wupstream\nVersion: 2.2.4+experimental.1\nArchitecture: amd64\nSection: video\n"
+        "Package: generic-wupstream\nVersion: 2.2.5+experimental.1\nArchitecture: amd64\nSection: video\n"
         "Priority: optional\nMaintainer: Generic Wupstream Program contributors\n"
         f"Installed-Size: {(installed + 1023) // 1024}\n"
         "Depends: libc6 (>= 2.28), python3, python3-gi, python3-gi-cairo, python3-evdev, gir1.2-gtk-3.0, gir1.2-gstreamer-1.0, "
         "gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-x, "
-        "gstreamer1.0-pipewire, xdg-desktop-portal\n"
+        "gstreamer1.0-pipewire, libxtst6, librsvg2-common, xdg-desktop-portal\n"
+        "Recommends: pulseaudio-utils\n"
         "Description: Use a Wii U GamePad as a Linux game controller and display\n"
         " Captures the desktop on X11 or via the ScreenCast portal on Wayland.\n"
         " Exposes a virtual controller via uinput and uses the official WUP Stream receiver.\n"
