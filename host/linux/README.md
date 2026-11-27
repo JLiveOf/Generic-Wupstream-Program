@@ -15,7 +15,7 @@
 
 ## Instalación con el `.deb`
 
-Instala el paquete x86-64 con `sudo apt install ./generic-wupstream_2.2.3+experimental.1_amd64.deb`.
+Instala el paquete x86-64 con `sudo apt install ./generic-wupstream_2.2.4+experimental.1_amd64.deb`.
 Reinicia Linux tras la instalación para activar el módulo y la regla de acceso a `/dev/uinput` para la sesión local activa.
 Abre **Generic Wupstream Program** desde el lanzador o ejecuta `generic-wupstream`.
 
@@ -42,15 +42,15 @@ compatible con el compositor, como `xdg-desktop-portal-gnome`,
 Para probar el AppImage en un Linux x86-64 con glibc 2.31 o posterior:
 
 ```sh
-chmod +x Generic-Wupstream-Program-v2.2.3-x86_64.AppImage
-./Generic-Wupstream-Program-v2.2.3-x86_64.AppImage
+chmod +x Generic-Wupstream-Program-v2.2.4-x86_64.AppImage
+./Generic-Wupstream-Program-v2.2.4-x86_64.AppImage
 ```
 
 ### Qué es FUSE
 
 FUSE (*Filesystem in Userspace*) permite que un programa de Linux monte un
 sistema de archivos. Un AppImage convencional lo usa para leer su contenido
-comprimido directamente. El AppImage de la versión 2.2.3 se descomprime
+comprimido directamente. El AppImage de la versión 2.2.4 se descomprime
 automáticamente en un directorio temporal al abrirlo. Puedes iniciarlo con
 doble clic después de darle permiso de ejecución, sin instalar FUSE ni añadir
 opciones al comando. [Documentación oficial de AppImage sobre FUSE](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).

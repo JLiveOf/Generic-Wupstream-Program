@@ -1,8 +1,8 @@
-name: Linux prerelease 2.2.3
+name: Linux prerelease 2.2.4
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/linux-2.2.3.yml, host/linux/build-appimage-release.sh]
+    paths: [.github/workflows/linux-2.2.4.yml, host/linux/build-appimage-release.sh]
   workflow_dispatch:
 jobs:
   linux:
@@ -25,18 +25,18 @@ jobs:
           (cd build/linux/x264 && ./configure --host=x86_64-linux-gnu --enable-static --enable-pic --disable-cli --disable-opencl --bit-depth=8 && make -j4 libx264.a)
           "$zig" cc -target x86_64-linux-gnu.2.28 -O2 -Wall -Werror -fPIC -shared -Ibuild/linux/x264 host/wupstream.c build/linux/x264/libx264.a -lm -pthread -o build/linux/libwupstream.so
           python3 -m py_compile host/linux/generic-wupstream host/linux/build-deb.py
-          python3 host/linux/build-deb.py build/linux/generic-wupstream_2.2.3+experimental.1_amd64.deb build/linux/libwupstream.so
-          dpkg-deb --info build/linux/generic-wupstream_2.2.3+experimental.1_amd64.deb
+          python3 host/linux/build-deb.py build/linux/generic-wupstream_2.2.4+experimental.1_amd64.deb build/linux/libwupstream.so
+          dpkg-deb --info build/linux/generic-wupstream_2.2.4+experimental.1_amd64.deb
       - name: Verify dpkg unpack on a clean root
         run: |
           root="$(mktemp -d)"
-          sudo dpkg --root="$root" --unpack build/linux/generic-wupstream_2.2.3+experimental.1_amd64.deb
+          sudo dpkg --root="$root" --unpack build/linux/generic-wupstream_2.2.4+experimental.1_amd64.deb
           test -x "$root/usr/bin/generic-wupstream"
           test -f "$root/usr/lib/generic-wupstream/wup_gamepad.py"
           test -f "$root/usr/lib/generic-wupstream/libwupstream.so"
       - name: Install the package and verify that the launcher opens a window
         run: |
-          sudo apt-get install -y xvfb xdotool ./build/linux/generic-wupstream_2.2.3+experimental.1_amd64.deb
+          sudo apt-get install -y xvfb xdotool ./build/linux/generic-wupstream_2.2.4+experimental.1_amd64.deb
           GDK_BACKEND=x11 xvfb-run -a bash -e -c '
             /usr/bin/generic-wupstream &
             pid=$!
@@ -55,8 +55,8 @@ jobs:
         with:
           name: linux-packages
           path: |
-            build/linux/generic-wupstream_2.2.3+experimental.1_amd64.deb
-            build/linux/Generic-Wupstream-Program-v2.2.3-x86_64.AppImage
+            build/linux/generic-wupstream_2.2.4+experimental.1_amd64.deb
+            build/linux/Generic-Wupstream-Program-v2.2.4-x86_64.AppImage
           if-no-files-found: error
   publish:
     needs: linux
@@ -72,6 +72,6 @@ jobs:
           name: linux-packages
           path: assets
       - run: |
-          if ! gh release view v2.2.3-linux.1 >/dev/null 2>&1; then
-            gh release create v2.2.3-linux.1 assets/*.deb assets/*.AppImage --target "$GITHUB_SHA" --prerelease --latest=false --title "Generic Wupstream Program 2.2.3 | Linux prerelease" --notes-file host/linux/RELEASE-2.2.3.md
+          if ! gh release view v2.2.4-linux.1 >/dev/null 2>&1; then
+            gh release create v2.2.4-linux.1 assets/*.deb assets/*.AppImage --target "$GITHUB_SHA" --prerelease --latest=false --title "Generic Wupstream Program 2.2.4 | Linux prerelease" --notes-file host/linux/RELEASE-2.2.4.md
           fi

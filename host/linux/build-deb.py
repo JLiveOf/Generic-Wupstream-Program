@@ -53,7 +53,7 @@ def build(output, engine):
     ]
     installed = sum(len(content) for _, content, _ in data)
     control = (
-        "Package: generic-wupstream\nVersion: 2.2.3+experimental.1\nArchitecture: amd64\nSection: video\n"
+        "Package: generic-wupstream\nVersion: 2.2.4+experimental.1\nArchitecture: amd64\nSection: video\n"
         "Priority: optional\nMaintainer: Generic Wupstream Program contributors\n"
         f"Installed-Size: {(installed + 1023) // 1024}\n"
         "Depends: libc6 (>= 2.28), python3, python3-gi, python3-gi-cairo, python3-evdev, gir1.2-gtk-3.0, gir1.2-gstreamer-1.0, "

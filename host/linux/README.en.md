@@ -15,7 +15,7 @@
 
 ## Install the `.deb`
 
-Install the x86-64 package with `sudo apt install ./generic-wupstream_2.2.3+experimental.1_amd64.deb`. Reboot to load the module and apply the `/dev/uinput` access rule for the active local session. Open **Generic Wupstream Program** from the launcher or run `generic-wupstream`.
+Install the x86-64 package with `sudo apt install ./generic-wupstream_2.2.4+experimental.1_amd64.deb`. Reboot to load the module and apply the `/dev/uinput` access rule for the active local session. Open **Generic Wupstream Program** from the launcher or run `generic-wupstream`.
 
 In the GamePad's Homebrew Menu, install and open the official **WUP Stream** from the App Store. Enter the IP shown on the GamePad and choose a frame rate and quality. The app streams H.264 at 854 × 480 with capture rates from 15 to 60 FPS. Audio support is pending on Linux.
 
@@ -32,12 +32,12 @@ The **Reportar un problema en GitHub** button opens a GitHub issue form with a s
 ## AppImage
 
 On an x86-64 Linux system with glibc 2.31 or later, make the AppImage executable
-with `chmod +x Generic-Wupstream-Program-v2.2.3-x86_64.AppImage` and run it.
+with `chmod +x Generic-Wupstream-Program-v2.2.4-x86_64.AppImage` and run it.
 ### What is FUSE?
 
 FUSE (*Filesystem in Userspace*) lets a Linux program mount a filesystem.
 A conventional AppImage uses it to read its compressed contents directly.
-The 2.2.3 AppImage automatically extracts itself into a temporary directory
+The 2.2.4 AppImage automatically extracts itself into a temporary directory
 when opened. After marking the file executable, you can launch it with a
 double-click without installing FUSE or passing command-line options.
 [Official AppImage documentation on FUSE](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).

@@ -30,7 +30,7 @@ PORTAL = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
 SCREENCAST = "org.freedesktop.portal.ScreenCast"
 ISSUES = "https://github.com/JLiveOf/Generic-Wupstream-Program/issues/new"
-VERSION = "2.2.3+experimental.1"
+VERSION = "2.2.4+experimental.1"
 
 
 class ScreenCast:
