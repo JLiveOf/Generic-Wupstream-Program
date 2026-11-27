@@ -46,8 +46,14 @@ chmod +x Generic-Wupstream-Program-v2.2.3-x86_64.AppImage
 ./Generic-Wupstream-Program-v2.2.3-x86_64.AppImage
 ```
 
-Si el AppImage normal falla con FUSE, usa la variante **sin FUSE** o añade
-`--appimage-extract-and-run` al comando.
+### Qué es FUSE
+
+FUSE (*Filesystem in Userspace*) permite que un programa de Linux monte un
+sistema de archivos. Un AppImage convencional lo usa para leer su contenido
+comprimido directamente. El AppImage de la versión 2.2.3 se descomprime
+automáticamente en un directorio temporal al abrirlo. Puedes iniciarlo con
+doble clic después de darle permiso de ejecución, sin instalar FUSE ni añadir
+opciones al comando. [Documentación oficial de AppImage sobre FUSE](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
 
 ### Activar el mando virtual con el AppImage
 

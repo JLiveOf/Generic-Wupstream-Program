@@ -37,17 +37,23 @@ def bundle(package, appimagetool, output):
                       Path("/usr/lib/python3/dist-packages/evdev"), Path("/usr/lib/python3/dist-packages/cairo"),
                       LIB / "girepository-1.0", LIB / "spa-0.2", LIB / "pipewire-0.3",
                       Path("/usr/share/pipewire"), Path("/usr/share/glib-2.0/schemas"),
-                      Path("/usr/share/icons/Adwaita"), Path("/usr/share/icons/hicolor")):
+                      Path("/usr/share/icons/Adwaita"), Path("/usr/share/icons/hicolor"),
+                      Path("/usr/share/mime")):
         tree(directory)
     for video in VIDEO_PLUGINS:
         copy(PLUGINS / f"libgst{video}.so")
     copy(LIB / "gstreamer1.0/gstreamer-1.0/gst-plugin-scanner")
     pixbuf = LIB / "gdk-pixbuf-2.0"
     loaders = pixbuf / "2.10.0/loaders"
-    svg = loaders / "libpixbufloader-svg.so"
-    copy(svg)
-    query = subprocess.check_output([str(pixbuf / "gdk-pixbuf-query-loaders"), str(svg)], text=True)
-    (appdir / "pixbuf-loaders.cache.in").write_text(query.replace(str(svg), "@APPDIR@" + str(svg)))
+    image_loaders = [loaders / f"libpixbufloader-{format_name}.so" for format_name in ("png", "svg")]
+    for loader in image_loaders:
+        copy(loader)
+    query = subprocess.check_output(
+        [str(pixbuf / "gdk-pixbuf-query-loaders"), *map(str, image_loaders)], text=True
+    )
+    (appdir / "pixbuf-loaders.cache.in").write_text(
+        query.replace(f'"{loaders}/', f'"@APPDIR@{loaders}/')
+    )
 
     # Typelibs load GTK/GStreamer libraries with dlopen, which ldd cannot infer
     # from the Python executable alone.

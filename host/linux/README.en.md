@@ -33,8 +33,14 @@ The **Reportar un problema en GitHub** button opens a GitHub issue form with a s
 
 On an x86-64 Linux system with glibc 2.31 or later, make the AppImage executable
 with `chmod +x Generic-Wupstream-Program-v2.2.3-x86_64.AppImage` and run it.
-If the standard AppImage fails with FUSE, use the **sin FUSE** variant or pass
-`--appimage-extract-and-run`.
+### What is FUSE?
+
+FUSE (*Filesystem in Userspace*) lets a Linux program mount a filesystem.
+A conventional AppImage uses it to read its compressed contents directly.
+The 2.2.3 AppImage automatically extracts itself into a temporary directory
+when opened. After marking the file executable, you can launch it with a
+double-click without installing FUSE or passing command-line options.
+[Official AppImage documentation on FUSE](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
 
 ### Enable the virtual controller with the AppImage
 

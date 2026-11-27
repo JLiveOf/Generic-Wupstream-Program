@@ -4,6 +4,7 @@ set -eu
 export APPDIR
 export WUP_HOST_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
 export WUP_HOST_XDG_DATA_DIRS="${XDG_DATA_DIRS-}"
+export WUP_HOST_XDG_DATA_HOME="${XDG_DATA_HOME-}"
 libs="$APPDIR/usr/lib/x86_64-linux-gnu"
 export LD_LIBRARY_PATH="$libs:$APPDIR/lib/x86_64-linux-gnu"
 export PYTHONHOME="$APPDIR/usr"
@@ -13,7 +14,9 @@ export GI_TYPELIB_PATH="$libs/girepository-1.0"
 export GST_PLUGIN_PATH_1_0=
 export GST_PLUGIN_SYSTEM_PATH_1_0="$libs/gstreamer-1.0"
 export GST_PLUGIN_SCANNER="$libs/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
-export XDG_DATA_DIRS="$APPDIR/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+# GTK and GLib in the AppImage expect the bundled GSettings schemas.
+export XDG_DATA_DIRS="$APPDIR/usr/share"
+export XDG_DATA_HOME="$APPDIR/usr/share"
 export GSETTINGS_SCHEMA_DIR="$APPDIR/usr/share/glib-2.0/schemas"
 cache=$(mktemp)
 escaped=$(printf '%s' "$APPDIR" | sed 's/[\&|]/\\&/g')

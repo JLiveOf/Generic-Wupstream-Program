@@ -133,7 +133,7 @@ def open_issue_url(url):
                  "GDK_PIXBUF_MODULE_FILE", "GST_PLUGIN_SYSTEM_PATH_1_0", "GST_PLUGIN_PATH_1_0",
                  "GST_PLUGIN_SCANNER", "SPA_PLUGIN_DIR", "PIPEWIRE_MODULE_DIR", "PIPEWIRE_CONFIG_DIR"):
         env.pop(name, None)
-    for name in ("LD_LIBRARY_PATH", "XDG_DATA_DIRS"):
+    for name in ("LD_LIBRARY_PATH", "XDG_DATA_DIRS", "XDG_DATA_HOME"):
         value = env.pop("WUP_HOST_" + name, "")
         if value:
             env[name] = value
